@@ -1,199 +1,716 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect, useLayoutEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, Line, Sparkles, Grid } from "@react-three/drei";
-import { Maximize2, Minimize2, Bot, Loader2 } from "lucide-react";
+import { Maximize2, Minimize2, Bot, Loader2, X } from "lucide-react";
+import { gsap } from "gsap";
 import useCognitiveStore from "../store/useCognitiveStore";
 
-function DataPoint({ node, onSelect }) {
+/* ──────────────────────────────────────────────────────────────────────
+   3D SCENE COMPONENTS
+────────────────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────────
+   3D SCENE COMPONENTS
+   ────────────────────────────────────────────────────────────────────── */
+function DataPoint({ node, isSelected, isSelectionActive, queryVector, onSelect, onHover }) {
     const mesh = useRef();
+    const material = useRef();
+    const [hovered, setHovered] = useState(false);
+
+    // Initial and Default sizes
+    const baseScale = 0.45; // Increased by ~30% from 0.35
+    const selectedScale = baseScale * 1.4;
+
+    useLayoutEffect(() => {
+        if (!mesh.current || !material.current) return;
+
+        const ctx = gsap.context(() => {
+            // 1. Opacity Control
+            let targetOpacity = 0.75;
+            if (isSelectionActive) {
+                targetOpacity = isSelected ? 1.0 : 0.35;
+            }
+
+            if (material.current) {
+                gsap.to(material.current, {
+                    opacity: targetOpacity,
+                    duration: 0.3,
+                    ease: "power2.out"
+                });
+            }
+
+            // 2. Magnetic Pull
+            if (isSelected && queryVector && mesh.current) {
+                const targetPos = [
+                    node.position[0] + (queryVector[0] - node.position[0]) * 0.05,
+                    node.position[1] + (queryVector[1] - node.position[1]) * 0.05,
+                    node.position[2] + (queryVector[2] - node.position[2]) * 0.05
+                ];
+
+                // Animate pull
+                gsap.to(mesh.current.position, {
+                    x: targetPos[0],
+                    y: targetPos[1],
+                    z: targetPos[2],
+                    duration: 0.6,
+                    ease: "power2.out",
+                    onComplete: () => {
+                        // Resettle
+                        if (mesh.current) {
+                            gsap.to(mesh.current.position, {
+                                x: node.position[0],
+                                y: node.position[1],
+                                z: node.position[2],
+                                duration: 0.4,
+                                ease: "power2.inOut",
+                                delay: 0.5
+                            });
+                        }
+                    }
+                });
+            } else if (mesh.current) {
+                // Return to base if not selected
+                gsap.to(mesh.current.position, {
+                    x: node.position[0],
+                    y: node.position[1],
+                    z: node.position[2],
+                    duration: 0.4,
+                    ease: "power2.out"
+                });
+            }
+
+            // 3. Scale
+            if (mesh.current) {
+                const targetScale = isSelected ? selectedScale : baseScale;
+                const finalScale = hovered ? targetScale * 1.1 : targetScale;
+
+                gsap.to(mesh.current.scale, {
+                    x: finalScale,
+                    y: finalScale,
+                    z: finalScale,
+                    duration: 0.2,
+                    ease: "power2.out"
+                });
+            }
+        });
+
+        return () => ctx.revert();
+    }, [isSelected, isSelectionActive, queryVector, hovered, node.position, baseScale, selectedScale]);
+
     useFrame((state) => {
         if (mesh.current) {
-            const scale = 1 + Math.sin(state.clock.elapsedTime * 1.8 + node.position[0]) * 0.08;
-            mesh.current.scale.setScalar(scale);
+            // Subtle pulse (Part 2.4 - remains after animation)
+            const pulseAmount = isSelected ? 0.08 : 0.03;
+            const pulseFreq = isSelected ? 4 : 1.5;
+            const s = 1 + Math.sin(state.clock.elapsedTime * pulseFreq) * pulseAmount;
+
+            // Apply pulse on top of current scale
+            const base = hovered ? 1.1 : 1.0;
+            mesh.current.scale.setScalar((isSelected ? selectedScale : baseScale) * s * base);
         }
     });
 
     return (
-        <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
-            <mesh
-                ref={mesh}
-                position={node.position}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect(node);
-                }}
-            >
-                <sphereGeometry args={[0.08, 24, 24]} />
-                <meshStandardMaterial color={node.color || "#00F0FF"} emissive={node.color || "#00F0FF"} emissiveIntensity={1.5} toneMapped={false} />
-            </mesh>
-        </Float>
+        <mesh
+            ref={mesh}
+            position={node.position}
+            onClick={(e) => { e.stopPropagation(); onSelect(node); }}
+            onPointerOver={(e) => {
+                e.stopPropagation();
+                setHovered(true);
+                onHover(node);
+            }}
+            onPointerOut={() => {
+                setHovered(false);
+                onHover(null);
+            }}
+        >
+            <sphereGeometry args={[1, 32, 32]} />
+            <meshStandardMaterial
+                ref={material}
+                color={node.color || "#00F0FF"}
+                emissive={node.color || "#00F0FF"}
+                emissiveIntensity={isSelected ? (hovered ? 6 : 4) : (hovered ? 2.5 : 1.2)}
+                transparent
+                opacity={0.75}
+                toneMapped={false}
+            />
+        </mesh>
     );
 }
 
-function Scene({ nodes, onNodeSelect }) {
-    const lines = useMemo(() => {
-        const out = [];
-        for (let i = 0; i < nodes.length; i += 1) {
-            for (let j = i + 1; j < nodes.length; j += 1) {
-                const a = nodes[i].position;
-                const b = nodes[j].position;
-                const dx = a[0] - b[0];
-                const dy = a[1] - b[1];
-                const dz = a[2] - b[2];
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (dist < 2.2) {
-                    out.push({
-                        id: `${nodes[i].id}-${nodes[j].id}`,
-                        points: [a, b],
-                        color: nodes[i].color || "#00F0FF",
-                        opacity: Math.max(0.05, (2.2 - dist) / 2.2) * 0.35,
-                    });
-                }
+function QueryNode({ position }) {
+    if (!position) return null;
+    const mesh = useRef();
+    const group = useRef();
+
+    useLayoutEffect(() => {
+        if (!group.current) return;
+
+        const ctx = gsap.context(() => {
+            if (group.current) {
+                gsap.fromTo(group.current.scale,
+                    { x: 0, y: 0, z: 0 },
+                    { x: 1, y: 1, z: 1, duration: 0.4, ease: "power3.out" }
+                );
             }
+        });
+
+        return () => ctx.revert();
+    }, [position]);
+
+    useFrame((state) => {
+        if (mesh.current) {
+            const s = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.05;
+            mesh.current.scale.setScalar(s);
         }
-        return out;
-    }, [nodes]);
+    });
+
+    return (
+        <group ref={group} position={position}>
+            <mesh ref={mesh}>
+                <sphereGeometry args={[1.5, 32, 32]} />
+                <meshStandardMaterial
+                    color="#00F0FF"
+                    emissive="#00F0FF"
+                    emissiveIntensity={8}
+                    toneMapped={false}
+                    transparent
+                    opacity={1.0}
+                />
+            </mesh>
+            {/* Outer Glow / Halo (Part 4) */}
+            <mesh scale={2.4}>
+                <sphereGeometry args={[1, 32, 32]} />
+                <meshStandardMaterial
+                    color="#00F0FF"
+                    transparent
+                    opacity={0.15}
+                    depthWrite={false}
+                />
+            </mesh>
+        </group>
+    );
+}
+
+function ProgressiveLine({ start, end, color }) {
+    const [progress, setProgress] = useState(0);
+    const lineContainerRef = useRef(null);
+
+    useLayoutEffect(() => {
+        if (!lineContainerRef.current) return undefined;
+
+        const tweenState = { p: 0 };
+        const ctx = gsap.context(() => {
+            gsap.fromTo(
+                tweenState,
+                { p: 0 },
+                {
+                    p: 1,
+                    duration: 0.5,
+                    ease: "power2.inOut",
+                    onUpdate: () => {
+                        setProgress(tweenState.p);
+                    },
+                }
+            );
+        });
+
+        return () => ctx.revert();
+    }, [start, end]);
+
+    const currentEnd = [
+        start[0] + (end[0] - start[0]) * progress,
+        start[1] + (end[1] - start[1]) * progress,
+        start[2] + (end[2] - start[2]) * progress
+    ];
+
+    return (
+        <group ref={lineContainerRef}>
+            <Line
+                points={[start, currentEnd]}
+                color={color}
+                lineWidth={1.2}
+                transparent
+                opacity={0.4 * progress}
+            />
+        </group>
+    );
+}
+
+function Scene({ nodes, queryVector, selectedChunkIds, onNodeSelect, onHover }) {
+    const isSelectionActive = selectedChunkIds.length > 0;
 
     return (
         <>
-            <ambientLight intensity={0.2} />
-            <pointLight position={[8, 6, 8]} intensity={1} color="#BD00FF" />
-            <pointLight position={[-8, -4, -8]} intensity={0.9} color="#00F0FF" />
+            <ambientLight intensity={0.4} />
+            <pointLight position={[20, 30, 20]} intensity={1.5} color="#BD00FF" />
+            <pointLight position={[-20, -30, -20]} intensity={1.5} color="#00F0FF" />
 
             <Grid
-                position={[0, -2, 0]}
-                args={[20, 20]}
-                cellSize={1}
-                cellThickness={0.5}
-                cellColor="rgba(255, 255, 255, 0.05)"
-                sectionSize={5}
-                sectionThickness={1}
-                sectionColor="rgba(255, 255, 255, 0.1)"
-                fadeDistance={30}
-                fadeStrength={1}
+                position={[0, -25, 0]} args={[120, 120]}
+                cellSize={10} cellThickness={1}
+                cellColor="#00f0ff"
+                sectionSize={50} sectionThickness={1.5}
+                sectionColor="#bd00ff"
+                fadeDistance={150} fadeStrength={1}
             />
 
-            {lines.map((line) => (
-                <Line key={line.id} points={line.points} color={line.color} transparent opacity={line.opacity} lineWidth={1} />
+            {/* Context Lines (Progressive) */}
+            {queryVector && selectedChunkIds.map(id => {
+                const node = nodes.find(n => n.id === id);
+                if (!node) return null;
+                return (
+                    <ProgressiveLine
+                        key={`line-${id}`}
+                        start={queryVector}
+                        end={node.position}
+                        color="#00F0FF"
+                    />
+                );
+            })}
+
+            {/* Query Node */}
+            <QueryNode position={queryVector} />
+
+            {/* Document Chunks */}
+            {nodes.map(n => (
+                <DataPoint
+                    key={n.id}
+                    node={n}
+                    isSelected={selectedChunkIds.includes(n.id)}
+                    isSelectionActive={isSelectionActive}
+                    queryVector={queryVector}
+                    onSelect={onNodeSelect}
+                    onHover={onHover}
+                />
             ))}
 
-            {nodes.map((node) => (
-                <DataPoint key={node.id} node={node} onSelect={onNodeSelect} />
-            ))}
-
-            <Sparkles count={45} scale={15} size={2} speed={0.4} opacity={0.3} color="#ffffff" />
+            <Sparkles count={100} scale={100} size={1} speed={0.2} opacity={0.2} color="#ffffff" />
         </>
     );
 }
 
-function NodeInspectorPanel({ node, loading, onClose }) {
+/* ──────────────────────────────────────────────────────────────────────
+   HOVER TOOLTIP (Part 3)
+   ────────────────────────────────────────────────────────────────────── */
+function HoverTooltip({ node, score, mouseX, mouseY }) {
+    const ref = useRef();
+
+    useLayoutEffect(() => {
+        if (!node || !ref.current) return undefined;
+
+        const ctx = gsap.context(() => {
+            if (ref.current) {
+                gsap.fromTo(ref.current,
+                    { opacity: 0, y: 6 },
+                    { opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
+                );
+            }
+        }, ref.current);
+
+        return () => ctx.revert();
+    }, [node]);
+
     if (!node) return null;
 
     return (
-        <div className="absolute top-16 right-4 w-72 glass-panel rounded-xl p-4 flex flex-col gap-3 z-50 pointer-events-auto shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-[#00F0FF]/30">
-            <div className="flex justify-between items-start">
-                <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-2 h-2 rounded-full bg-[#00F0FF] shadow-[0_0_8px_#00F0FF]" />
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider truncate">{node.label}</h3>
+        <div
+            ref={ref}
+            style={{
+                position: "fixed",
+                pointerEvents: "none",
+                background: "rgba(9, 11, 17, 0.98)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                width: 280,
+                zIndex: 10000,
+                boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+                backdropFilter: "blur(12px)",
+                transform: `translate(20px, -50%)`,
+                left: mouseX,
+                top: mouseY,
+            }}
+        >
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, alignItems: "center" }}>
+                <span style={{
+                    fontFamily: "'IBM Plex Mono'",
+                    fontSize: 8,
+                    color: node.color,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    background: `${node.color}15`,
+                    padding: "2px 6px",
+                    borderRadius: 4
+                }}>
+                    {node.category}
+                </span>
+                {typeof score === "number" && score > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8, color: "rgba(255,255,255,0.4)" }}>SIM:</span>
+                        <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 9, color: "#00FFA3", fontWeight: 700 }}>
+                            {score.toFixed(4)}
+                        </span>
+                    </div>
+                )}
+            </div>
+            <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 2 }}>
+                {node.documentName}
+            </div>
+            <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 8.5, color: "rgba(148,163,184,0.4)", marginBottom: 10 }}>
+                # {node.chunkId} — FRAGMENT_ID: {node.id.split('-').pop()}
+            </div>
+            <p style={{
+                fontFamily: "'Inter', sans-serif", fontSize: 10, color: "rgba(255,255,255,0.7)",
+                lineHeight: 1.5, margin: 0,
+                borderLeft: `2px solid ${node.color}50`, paddingLeft: 10,
+                background: "rgba(255,255,255,0.03)",
+                padding: "8px 10px",
+                borderRadius: "0 6px 6px 0"
+            }}>
+                "{node.textPreview}..."
+            </p>
+        </div>
+    );
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   NODE INSPECTOR (floats inside canvas area)
+   ────────────────────────────────────────────────────────────────────── */
+function NodeInspector({ node, loading, onClose }) {
+    if (!node) return null;
+    return (
+        <div style={{
+            position: "absolute", top: 60, right: 16, width: 300,
+            background: "rgba(9, 11, 17, 0.98)",
+            border: "1px solid rgba(0,240,255,0.2)",
+            borderRadius: 16, padding: 20,
+            display: "flex", flexDirection: "column", gap: 12,
+            zIndex: 20, pointerEvents: "auto",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.7)",
+            backdropFilter: "blur(14px)"
+        }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00F0FF", boxShadow: "0 0 10px #00F0FF" }} />
+                    <span style={{
+                        fontFamily: "'Outfit', sans-serif",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "#fff",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.15em"
+                    }}>
+                        Vector Fragment
+                    </span>
                 </div>
-                <button onClick={onClose} className="text-[#94A3B8] hover:text-white transition-colors">
-                    <Minimize2 size={12} />
+                <button onClick={onClose} style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "rgba(148,163,184,0.6)",
+                    padding: 6,
+                    borderRadius: 6,
+                    display: "flex",
+                    alignItems: "center"
+                }}>
+                    <X size={12} />
                 </button>
             </div>
 
-            <div className="text-[10px] text-[#94A3B8] font-mono border-t border-white/5 pt-2">
-                <div className="flex justify-between mb-1">
-                    <span>Similarity:</span>
-                    <span className="text-[#00FFA3]">{typeof node.score === "number" ? node.score.toFixed(4) : "N/A"}</span>
+            <div style={{
+                fontFamily: "'IBM Plex Mono'",
+                fontSize: 10,
+                color: "rgba(148,163,184,0.8)",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+                paddingTop: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6
+            }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>DOCUMENT</span>
+                    <span style={{ color: "#fff", fontWeight: 600 }}>{node.documentName}</span>
                 </div>
-                <div className="flex justify-between mb-1">
-                    <span>Source:</span>
-                    <span className="text-white truncate max-w-[140px] text-right">{node.source || "Unknown"}</span>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>CATEGORY</span>
+                    <span style={{ color: node.color, fontWeight: 700 }}>{node.category.toUpperCase()}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>COORDINATES</span>
+                    <span style={{ color: "rgba(255,255,255,0.4)" }}>
+                        {node.position[0].toFixed(1)}, {node.position[1].toFixed(1)}, {node.position[2].toFixed(1)}
+                    </span>
                 </div>
             </div>
 
-            <p className="text-[10px] text-white/80 leading-relaxed bg-[#000000]/40 p-2 rounded border border-white/5 min-h-14">
-                {loading ? "Searching vectors..." : node.summary}
+            <p style={{
+                fontFamily: "'Inter', sans-serif", fontSize: 11, color: "rgba(255,255,255,0.85)",
+                lineHeight: 1.6, background: "rgba(255,255,255,0.03)",
+                padding: "12px", borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.05)", margin: 0,
+                fontStyle: "italic"
+            }}>
+                {loading ? "Synthesizing vector data…" : `"${node.textPreview}"`}
             </p>
 
-            <button className="flex items-center justify-center gap-2 w-full py-1.5 bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 border border-[#00F0FF]/30 rounded text-[10px] font-bold text-[#00F0FF] uppercase tracking-wide transition-all">
-                <Bot size={12} />
-                Open in Reasoning
+            <button style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                padding: "10px 16px", borderRadius: 10,
+                border: "1px solid rgba(0,240,255,0.2)", background: "rgba(0,240,255,0.1)",
+                color: "#00F0FF", fontFamily: "'Outfit', sans-serif", fontSize: 11,
+                fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer",
+                transition: "all 0.2s ease"
+            }}>
+                <Bot size={14} /> Analyze Segment
             </button>
         </div>
     );
 }
 
-export default function VectorPanel({ className }) {
-    const {
-        vectorResults,
-        isFullscreenVector,
-        toggleFullscreenVector,
-        setSelectedNode,
-        selectedNode,
-        searchVectors,
-        loadingState,
-    } = useCognitiveStore();
+/* ──────────────────────────────────────────────────────────────────────
+   CANVAS CONTENT (shared between inline & modal)
+   ────────────────────────────────────────────────────────────────────── */
+function VectorCanvas({
+    nodes, queryVector, selectedChunkIds, similarityScores,
+    selectedNode, loadingState, onNodeSelect, isModal
+}) {
+    const { setSelectedNode, setHoveredChunk, hoveredChunk } = useCognitiveStore();
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-    const containerClass = isFullscreenVector
-        ? "w-full h-full min-h-[400px] relative"
-        : `w-full h-full min-h-[400px] relative glass-panel rounded-2xl group ${className}`;
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            setMousePos({ x: e.clientX, y: e.clientY });
+        };
+        window.addEventListener("mousemove", handleMouseMove);
+        return () => window.removeEventListener("mousemove", handleMouseMove);
+    }, []);
 
-    const handleNodeSelect = async (node) => {
-        setSelectedNode(node);
-        try {
-            const results = await searchVectors(node.label);
-            if (Array.isArray(results) && results.length > 0) {
-                setSelectedNode(results[0]);
-            }
-        } catch {
-            // Store manages error state.
-        }
-    };
 
     return (
-        <div className={containerClass}>
-            <Canvas camera={{ position: [8, 5, 8], fov: 40 }} dpr={[1, 2]} className="z-0 rounded-2xl">
-                <Scene nodes={vectorResults} onNodeSelect={handleNodeSelect} />
+        <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+            <Canvas
+                camera={{ position: [60, 40, 60], fov: 45 }}
+                dpr={[1, 2]}
+                style={{ borderRadius: isModal ? 14 : 10, background: "#05060A" }}
+            >
+                <Scene
+                    nodes={nodes}
+                    queryVector={queryVector}
+                    selectedChunkIds={selectedChunkIds}
+                    onNodeSelect={onNodeSelect}
+                    onHover={setHoveredChunk}
+                />
                 <OrbitControls
-                    enableZoom
-                    enablePan
-                    autoRotate={!selectedNode}
-                    autoRotateSpeed={0.5}
-                    maxPolarAngle={Math.PI / 2 - 0.1}
-                    minDistance={4}
-                    maxDistance={30}
-                    target={[0, 0, 0]}
-                    dampingFactor={0.05}
+                    enableZoom enablePan
+                    autoRotate={!selectedNode && !queryVector}
+                    autoRotateSpeed={0.3}
+                    maxPolarAngle={Math.PI / 2 + 0.1}
+                    minDistance={10} maxDistance={150}
+                    target={[0, 0, 0]} dampingFactor={0.05}
                 />
             </Canvas>
 
-            <div className={`absolute top-4 left-4 z-10 flex flex-col gap-1 pointer-events-none ${isFullscreenVector ? "scale-110 origin-top-left" : ""}`}>
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2 pointer-events-auto drop-shadow-[0_0_10px_rgba(0,240,255,0.5)]">
-                    3D Cognitive Field
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] animate-pulse shadow-[0_0_10px_#00F0FF]" />
+            {/* Tooltip Overlay */}
+            <HoverTooltip
+                node={hoveredChunk}
+                score={hoveredChunk ? similarityScores[hoveredChunk.id] : 0}
+                mouseX={mousePos.x}
+                mouseY={mousePos.y}
+            />
+
+
+            {/* Status Overlays */}
+            <div style={{ position: "absolute", top: 16, left: 16, zIndex: 10, pointerEvents: "none" }}>
+                <h2 style={{
+                    fontFamily: "'Outfit', sans-serif", fontSize: isModal ? 12 : 10,
+                    fontWeight: 700, color: "#fff",
+                    textTransform: "uppercase", letterSpacing: "0.15em",
+                    display: "flex", alignItems: "center", gap: 8,
+                    textShadow: "0 0 15px rgba(0,240,255,0.4)",
+                    marginBottom: 4
+                }}>
+                    Cognitive Retrieval Field
+                    <div style={{
+                        width: 7, height: 7, borderRadius: "50%",
+                        background: queryVector ? "#00FFA3" : "#00F0FF",
+                        boxShadow: `0 0 10px ${queryVector ? "#00FFA3" : "#00F0FF"}`
+                    }} />
                 </h2>
-                <div className="flex gap-3 text-[9px] font-mono text-[#94A3B8] pointer-events-auto opacity-70">
-                    <span>NODES: {vectorResults.length}</span>
-                    <span>STATE: {loadingState.vectors ? "PROCESSING" : "READY"}</span>
+                <div style={{
+                    display: "flex", gap: 14,
+                    fontFamily: "'IBM Plex Mono'", fontSize: 8.5,
+                    color: "rgba(148,163,184,0.5)",
+                    letterSpacing: "0.05em"
+                }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ width: 4, height: 4, borderRadius: "50%", border: "1px solid currentColor" }} />
+                        MEMORIES: {nodes.length}
+                    </span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4, color: selectedChunkIds.length ? "#00FFA3" : "inherit" }}>
+                        <div style={{ width: 4, height: 4, borderRadius: "50%", background: selectedChunkIds.length ? "#00FFA3" : "transparent", border: "1px solid currentColor" }} />
+                        PIPELINE: {selectedChunkIds.length ? "RETRIEVAL_ACTIVE" : "STANDBY"}
+                    </span>
                 </div>
             </div>
 
-            <button
-                onClick={toggleFullscreenVector}
-                className="absolute top-4 right-4 z-10 p-2 bg-[#13141C]/60 backdrop-blur-md rounded-lg border border-white/10 text-white hover:text-[#00F0FF] hover:border-[#00F0FF]/50 transition-all shadow-lg"
-            >
-                {isFullscreenVector ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-            </button>
-
-            {loadingState.vectors ? (
-                <div className="absolute top-16 left-4 z-20 flex items-center gap-2 text-[10px] font-mono text-[#FFD600] bg-[#13141C]/70 border border-[#FFD600]/20 rounded px-2 py-1">
-                    <Loader2 size={11} className="animate-spin" />
-                    SEARCHING VECTORS...
+            {loadingState?.vectors && (
+                <div style={{
+                    position: "absolute", top: 62, left: 16, zIndex: 10,
+                    display: "flex", alignItems: "center", gap: 10,
+                    fontFamily: "'IBM Plex Mono'", fontSize: 9.5, color: "#00F0FF",
+                    background: "rgba(13,16,23,0.9)", border: "1px solid rgba(0,240,255,0.3)",
+                    borderRadius: 8, padding: "6px 12px",
+                    boxShadow: "0 8px 16px rgba(0,0,0,0.4)",
+                    backdropFilter: "blur(8px)"
+                }}>
+                    <Loader2 size={12} className="animate-spin" />
+                    SIMULATING EMBEDDINGS...
                 </div>
-            ) : null}
+            )}
 
-            <NodeInspectorPanel node={selectedNode} loading={loadingState.vectors} onClose={() => setSelectedNode(null)} />
+            <NodeInspector
+                node={selectedNode}
+                loading={loadingState?.vectors}
+                onClose={() => setSelectedNode(null)}
+            />
         </div>
+    );
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   MODAL OVERLAY (portal)
+   ────────────────────────────────────────────────────────────────────── */
+function VectorModal({ onClose, nodes, queryVector, selectedChunkIds, similarityScores, selectedNode, loadingState, onNodeSelect }) {
+    const backdropRef = useRef(null);
+    const cardRef = useRef(null);
+    const modalScopeRef = useRef(null);
+    const [isClosing, setIsClosing] = useState(false);
+
+    useLayoutEffect(() => {
+        if (!modalScopeRef.current || !backdropRef.current || !cardRef.current) return undefined;
+
+        const ctx = gsap.context(() => {
+            gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.22 });
+            gsap.fromTo(cardRef.current, { opacity: 0, scale: 0.96, y: 12 }, { opacity: 1, scale: 1, y: 0, duration: 0.28 });
+        }, modalScopeRef.current);
+
+        return () => ctx.revert();
+    }, []);
+
+    useLayoutEffect(() => {
+        if (!isClosing) return undefined;
+        if (!modalScopeRef.current || !backdropRef.current || !cardRef.current) {
+            onClose();
+            return undefined;
+        }
+
+        const ctx = gsap.context(() => {
+            gsap.to(backdropRef.current, { opacity: 0, duration: 0.2 });
+            gsap.to(cardRef.current, { opacity: 0, scale: 0.96, y: 10, duration: 0.2, onComplete: onClose });
+        }, modalScopeRef.current);
+
+        return () => ctx.revert();
+    }, [isClosing, onClose]);
+
+    const handleClose = () => {
+        if (isClosing) return;
+        setIsClosing(true);
+    };
+
+    return createPortal(
+        <div ref={modalScopeRef}>
+            <div ref={backdropRef} onClick={handleClose} style={{
+            position: "fixed", inset: 0, zIndex: 9000,
+            background: "rgba(4,5,9,0.85)", backdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 32,
+        }}>
+            <div ref={cardRef} onClick={e => e.stopPropagation()} style={{
+                position: "relative", width: "100%", maxWidth: 1200, height: "85vh",
+                background: "#090A0F", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 20, overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
+            }}>
+                <VectorCanvas
+                    nodes={nodes}
+                    queryVector={queryVector}
+                    selectedChunkIds={selectedChunkIds}
+                    similarityScores={similarityScores}
+                    selectedNode={selectedNode}
+                    loadingState={loadingState}
+                    onNodeSelect={onNodeSelect}
+                    isModal
+                />
+                <button onClick={handleClose} style={{
+                    position: "absolute", top: 16, right: 16, zIndex: 20,
+                    width: 32, height: 32, background: "rgba(13,16,23,0.8)",
+                    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", color: "rgba(200,212,225,0.7)"
+                }}>
+                    <X size={16} />
+                </button>
+            </div>
+        </div>
+        </div>,
+        document.body
+    );
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   VECTOR PANEL
+   ────────────────────────────────────────────────────────────────────── */
+export default function VectorPanel({ className }) {
+    const {
+        vectorResults, queryVector, selectedChunkIds, similarityScores,
+        setSelectedNode, selectedNode, loadingState,
+        isFullscreenVector, toggleFullscreenVector,
+    } = useCognitiveStore();
+
+    const handleNodeSelect = (node) => {
+        setSelectedNode(node);
+    };
+
+    return (
+        <>
+            <div className={`w-full h-full relative rounded-xl overflow-hidden ${className ?? ""}`} style={{ background: "#05060A" }}>
+                <VectorCanvas
+                    nodes={vectorResults}
+                    queryVector={queryVector}
+                    selectedChunkIds={selectedChunkIds}
+                    similarityScores={similarityScores}
+                    selectedNode={selectedNode}
+                    loadingState={loadingState}
+                    onNodeSelect={handleNodeSelect}
+                    isModal={false}
+                />
+                <button
+                    onClick={() => toggleFullscreenVector()}
+                    style={{
+                        position: "absolute", top: 10, right: 10, zIndex: 10,
+                        width: 28, height: 28, background: "rgba(13,16,23,0.75)",
+                        border: "1px solid rgba(148,163,184,0.2)", borderRadius: 7,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", color: "rgba(148,163,184,0.8)"
+                    }}
+                >
+                    <Maximize2 size={13} />
+                </button>
+            </div>
+
+            {isFullscreenVector && (
+                <VectorModal
+                    onClose={() => toggleFullscreenVector()}
+                    nodes={vectorResults}
+                    queryVector={queryVector}
+                    selectedChunkIds={selectedChunkIds}
+                    similarityScores={similarityScores}
+                    selectedNode={selectedNode}
+                    loadingState={loadingState}
+                    onNodeSelect={handleNodeSelect}
+                />
+            )}
+        </>
     );
 }

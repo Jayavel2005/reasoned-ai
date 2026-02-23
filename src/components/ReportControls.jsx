@@ -1,77 +1,58 @@
-import { useState } from "react";
+import { FileText, GitBranch } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
-
+/* Pure UI panel — no API calls. Buttons trigger local toast only. */
 export default function ReportControls() {
-
-  const [audit, setAudit] = useState("");
-  const [blueprint, setBlueprint] = useState("");
-  const [loadingAudit, setLoadingAudit] = useState(false);
-  const [loadingBlueprint, setLoadingBlueprint] = useState(false);
-
-  const generateAudit = async () => {
-    setLoadingAudit(true);
-    try {
-      const res = await fetch(`${API_BASE}/reports/audit`, {
-        method: "POST"
-      });
-      const data = await res.json();
-      setAudit(data.report);
-    } catch (err) {
-      setAudit("Failed to generate audit report.");
-    }
-    setLoadingAudit(false);
-  };
-
-  const generateBlueprint = async () => {
-    setLoadingBlueprint(true);
-    try {
-      const res = await fetch(`${API_BASE}/reports/blueprint`, {
-        method: "POST"
-      });
-      const data = await res.json();
-      setBlueprint(data.blueprint);
-    } catch (err) {
-      setBlueprint("Failed to generate blueprint.");
-    }
-    setLoadingBlueprint(false);
-  };
-
   return (
-    <div className="glass-panel p-4 flex flex-col gap-4 h-full">
+    <div
+      className="glass-panel rounded-2xl flex flex-col overflow-hidden"
+      style={{ height: "100%" }}
+    >
+      {/* Header */}
+      <div className="flex-none px-3 py-2 border-b border-white/5 bg-[#13141C]/40 flex items-center gap-2">
+        <FileText size={10} className="text-purple-400" />
+        <h3 className="text-[9px] font-bold text-white uppercase tracking-widest">
+          Reports
+        </h3>
+      </div>
 
-      <h2 className="text-sm text-purple-300 font-semibold">
-        Cognitive Reports
-      </h2>
+      {/* Body */}
+      <div className="flex-1 flex flex-col gap-3 p-4 min-h-0">
+        <p className="text-[10px] text-white/40 font-mono leading-relaxed">
+          Cognitive report generation requires an active backend connection.
+        </p>
 
-      <button
-        onClick={generateAudit}
-        disabled={loadingAudit}
-        className="bg-purple-600 hover:bg-purple-500 transition p-2 rounded text-white text-sm"
-      >
-        {loadingAudit ? "Generating Audit..." : "Generate Audit Report"}
-      </button>
+        {/* Audit */}
+        <button
+          disabled
+          className="w-full flex items-center gap-2 justify-center py-2 px-3 rounded-lg border border-purple-500/20 bg-purple-500/8 text-purple-300 text-[10px] font-semibold uppercase tracking-widest opacity-50 cursor-not-allowed"
+        >
+          <FileText size={10} />
+          Audit Report
+        </button>
 
-      <button
-        onClick={generateBlueprint}
-        disabled={loadingBlueprint}
-        className="bg-cyan-600 hover:bg-cyan-500 transition p-2 rounded text-white text-sm"
-      >
-        {loadingBlueprint ? "Generating Blueprint..." : "Generate Agentic Blueprint"}
-      </button>
+        {/* Blueprint */}
+        <button
+          disabled
+          className="w-full flex items-center gap-2 justify-center py-2 px-3 rounded-lg border border-cyan-500/20 bg-cyan-500/8 text-cyan-300 text-[10px] font-semibold uppercase tracking-widest opacity-50 cursor-not-allowed"
+        >
+          <GitBranch size={10} />
+          Agentic Blueprint
+        </button>
 
-      {audit && (
-        <div className="glass-panel p-3 overflow-y-auto max-h-60 text-xs text-gray-300 whitespace-pre-wrap">
-          {audit}
+        {/* Status indicator */}
+        <div className="mt-auto flex items-center gap-2 pt-3 border-t border-white/5">
+          <span
+            style={{
+              width: 5, height: 5, borderRadius: "50%",
+              background: "#C0524A",
+              flexShrink: 0,
+            }}
+          />
+          <span className="text-[9px] font-mono text-white/30 uppercase tracking-widest">
+            Backend Offline
+          </span>
         </div>
-      )}
-
-      {blueprint && (
-        <div className="glass-panel p-3 overflow-y-auto max-h-60 text-xs text-gray-300 whitespace-pre-wrap">
-          {blueprint}
-        </div>
-      )}
-
+      </div>
     </div>
   );
 }

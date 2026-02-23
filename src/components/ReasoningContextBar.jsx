@@ -1,48 +1,100 @@
-import { Layers, Activity, Server, Cpu } from "lucide-react";
+import { useRef, useEffect } from "react";
+import { gsap } from "gsap";
+import { Layers, Activity } from "lucide-react";
 import useCognitiveStore from "../store/useCognitiveStore";
-import { motion, AnimatePresence } from "framer-motion";
 
 export default function ReasoningContextBar() {
     const { chatContext } = useCognitiveStore();
+    const barRef = useRef(null);
+
+    useEffect(() => {
+        const el = barRef.current;
+        if (!el || !chatContext) return;
+        const ctx = gsap.context(() => {
+            gsap.fromTo(el,
+                { opacity: 0, y: 4 },
+                { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
+            );
+        });
+        return () => ctx.revert();
+    }, [chatContext]);
 
     if (!chatContext) return null;
 
     return (
-        <div className="flex-none h-8 px-6 mb-2 flex items-center gap-4 z-10 w-full overflow-hidden">
-
-            {/* Intent Badge */}
-            <div className="flex items-center gap-2 bg-[#BD00FF]/10 border border-[#BD00FF]/20 px-2 py-0.5 rounded-md backdrop-blur-sm">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#BD00FF] animate-pulse shadow-[0_0_5px_#BD00FF]" />
-                <span className="text-[9px] font-mono text-[#BD00FF] uppercase tracking-wider">{chatContext.intent}</span>
+        <div
+            ref={barRef}
+            style={{
+                display: "flex", alignItems: "center", gap: 10,
+                paddingBottom: 6,
+                opacity: 0,   /* GSAP reveals */
+            }}
+        >
+            {/* Intent badge */}
+            <div style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: "rgba(189,0,255,0.07)",
+                border: "1px solid rgba(189,0,255,0.18)",
+                padding: "2px 8px", borderRadius: 4,
+            }}>
+                <span style={{
+                    width: 4, height: 4, borderRadius: "50%",
+                    background: "#BD00FF", flexShrink: 0,
+                }} />
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", color: "rgba(189,0,255,0.75)",
+                    letterSpacing: "0.07em", textTransform: "uppercase",
+                }}>
+                    {chatContext.intent}
+                </span>
             </div>
 
-            {/* Context Stats */}
-            <div className="h-4 w-[1px] bg-white/10" />
+            {/* Divider */}
+            <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.08)" }} />
 
-            <div className="flex items-center gap-2 text-[9px] font-mono text-[#94A3B8]">
-                <Layers size={10} className="text-[#00F0FF]" />
-                <span>SOURCES: {chatContext.activeDocuments.length}</span>
+            {/* Stats */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Layers size={9} color="rgba(74,155,181,0.6)" />
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", color: "rgba(148,163,184,0.6)",
+                    letterSpacing: "0.04em",
+                }}>
+                    SOURCES: {chatContext.activeDocuments.length}
+                </span>
             </div>
 
-            <div className="flex items-center gap-2 text-[9px] font-mono text-[#94A3B8]">
-                <Activity size={10} className="text-[#00FFA3]" />
-                <span>CHUNKS: {chatContext.retrievedChunks}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Activity size={9} color="rgba(91,168,120,0.6)" />
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", color: "rgba(148,163,184,0.6)",
+                    letterSpacing: "0.04em",
+                }}>
+                    CHUNKS: {chatContext.retrievedChunks}
+                </span>
             </div>
 
-            {/* Dynamic Source Ticker */}
-            <div className="flex-1 min-w-0 flex justify-end gap-2 overflow-hidden">
-                <AnimatePresence>
-                    {chatContext.activeDocuments.map((doc, i) => (
-                        <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="text-[9px] font-mono text-white/50 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 truncate max-w-[120px]"
-                        >
-                            {doc}
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+            {/* Source tags */}
+            <div style={{
+                flex: 1, minWidth: 0,
+                display: "flex", justifyContent: "flex-end",
+                gap: 5, overflow: "hidden",
+            }}>
+                {chatContext.activeDocuments.slice(0, 3).map((doc, i) => (
+                    <span key={i} style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: "9px", color: "rgba(255,255,255,0.35)",
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                        padding: "1px 6px", borderRadius: 3,
+                        overflow: "hidden", textOverflow: "ellipsis",
+                        whiteSpace: "nowrap", maxWidth: 110,
+                    }}>
+                        {doc}
+                    </span>
+                ))}
             </div>
         </div>
     );

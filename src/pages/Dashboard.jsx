@@ -1,41 +1,63 @@
-import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { gsap } from "gsap";
 import MemoryPanel from "../components/MemoryPanel";
 import ChatPanel from "../components/ChatPanel";
 import AnalyticsPanel from "../components/AnalyticsPanel";
 
+/* ──────────────────────────────────────────────────────────────────────
+   DASHBOARD
+   Grid: 280px | 1fr | 280px
+   Outer padding 20px · Gap 20px · Rounded panel cards
+   No z-index · No backdrop-blur stacking · Single ambient layer
+────────────────────────────────────────────────────────────────────── */
 export default function Dashboard() {
+    const gridRef = useRef(null);
+
+    useEffect(() => {
+        const el = gridRef.current;
+        if (!el) return;
+        const ctx = gsap.context(() => {
+            gsap.fromTo(el,
+                { opacity: 0, y: 6 },
+                { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }
+            );
+        });
+        return () => ctx.revert();
+    }, []);
+
     return (
-        <div className="flex h-screen w-screen overflow-hidden bg-ai-bg text-ai-text-primary font-sans antialiased selection:bg-ai-accent selection:text-white">
-            {/* Background Ambience */}
-            <div className="absolute inset-0 pointer-events-none z-0">
-                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-ai-accent/5 rounded-full blur-[120px]" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/5 rounded-full blur-[120px]" />
+        /* Outer shell: full viewport, outer padding, dark base */
+        <div className="h-screen w-screen bg-ai-bg text-ai-text-primary p-5 relative overflow-hidden">
+
+            {/* ── Ambient glow — stays behind everything, no z-index needed ── */}
+            <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-ai-accent/5 rounded-full blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-ai-accent-purple/5 rounded-full blur-[100px]" />
             </div>
 
-            {/* Main Content Grid */}
-            <motion.div
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className="flex w-full h-full relative z-10"
+            {/* ── Grid ── */}
+            <div
+                ref={gridRef}
+                className="grid h-full grid-cols-[280px_1fr_280px] gap-5"
+                style={{ opacity: 0 /* GSAP reveals */ }}
             >
 
-                {/* Left Panel: System Memory */}
-                <div className="w-[20%] min-w-[280px] h-full border-r border-ai-border/40 backdrop-blur-sm bg-gradient-to-b from-ai-panel/80 to-ai-bg/90">
+                {/* Left — Memory Panel */}
+                <div className="rounded-xl border border-ai-border bg-ai-panel flex flex-col min-h-0 overflow-hidden">
                     <MemoryPanel />
                 </div>
 
-                {/* Center Panel: Reasoning Engine */}
-                <div className="w-[60%] flex-1 h-full shadow-2xl z-20 bg-ai-bg/50 backdrop-blur-sm relative">
+                {/* Center — Reasoning Engine (primary, slightly darker/cleaner) */}
+                <div className="rounded-xl border border-ai-border bg-ai-bg flex flex-col min-h-0 overflow-hidden">
                     <ChatPanel />
                 </div>
 
-                {/* Right Panel: Global Analytics */}
-                <div className="w-[20%] min-w-[280px] h-full border-l border-ai-border/40 backdrop-blur-sm bg-gradient-to-b from-ai-panel/80 to-ai-bg/90">
+                {/* Right — Analytics Panel */}
+                <div className="rounded-xl border border-ai-border bg-ai-panel flex flex-col min-h-0 overflow-hidden">
                     <AnalyticsPanel />
                 </div>
 
-            </motion.div>
+            </div>
         </div>
     );
 }

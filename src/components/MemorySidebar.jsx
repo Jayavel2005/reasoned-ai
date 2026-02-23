@@ -1,181 +1,327 @@
-import { useRef, useState, useEffect } from "react";
-import { Upload, HardDrive, FileText, CheckCircle, Activity, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { HardDrive, FolderOpen } from "lucide-react";
+import { gsap } from "gsap";
 import useCognitiveStore from "../store/useCognitiveStore";
+import IngestionModal from "./IngestionModal";
 
-export default function MemorySidebar() {
-    const { systemStatus, memoryFiles, loadingState, uploadFile, loadMemoryFiles } = useCognitiveStore();
-    const [dragActive, setDragActive] = useState(false);
-    const fileInputRef = useRef(null);
+/* ─── helpers ─────────────────────────────────────────────────────────── */
+const EXT_COLOR = {
+    pdf: "#E05252", docx: "#4A8FD4", doc: "#4A8FD4",
+    csv: "#5BB87A", json: "#E0A952", md: "#9B8ED4",
+    txt: "#8099B0", xlsx: "#5BB87A",
+};
+const extOf = (n) => (n ?? "").split(".").pop().toLowerCase();
 
+/* ═══ MEMORY FILE ROW ══════════════════════════════════════════════════ */
+function MemoryFileRow({ file, onRemove }) {
+    const rowRef = useRef(null);
+    const ext = extOf(file.name);
+    const color = EXT_COLOR[ext] ?? "#6B7B8E";
+
+    /* Entry animation — fires once on mount */
     useEffect(() => {
-        loadMemoryFiles().catch(() => {});
-    }, [loadMemoryFiles]);
+        const el = rowRef.current;
+        if (!el) return;
+        const ctx = gsap.context(() => {
+            gsap.fromTo(el,
+                { opacity: 0, y: 7 },
+                { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }
+            );
+        });
+        return () => ctx.revert();
+    }, []); // eslint-disable-line
 
-    const handleFiles = async (selectedFiles) => {
-        if (!selectedFiles || selectedFiles.length === 0) return;
-        const incomingFiles = Array.from(selectedFiles);
-
-        for (const file of incomingFiles) {
-            try {
-                await uploadFile(file);
-            } catch {
-                // Store handles status/error state.
-            }
-        }
-    };
-
-    const onDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDragActive(false);
-        handleFiles(e.dataTransfer.files);
-    };
-
-    const handleDrag = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === "dragenter" || e.type === "dragover") {
-            setDragActive(true);
-        } else if (e.type === "dragleave") {
-            setDragActive(false);
-        }
-    };
-
-    const handleClick = () => {
-        fileInputRef.current?.click();
+    /* Remove: fade + slide left + collapse height → then call parent */
+    const handleRemove = () => {
+        const el = rowRef.current;
+        if (!el) { onRemove(file.id); return; }
+        const ctx = gsap.context(() => {
+            gsap.timeline({
+                onComplete: () => { ctx.revert(); onRemove(file.id); },
+            })
+                .to(el, { opacity: 0, x: -10, duration: 0.18, ease: "power2.in" })
+                .to(el, { height: 0, paddingTop: 0, paddingBottom: 0, marginBottom: 0, duration: 0.17, ease: "power2.inOut" });
+        });
     };
 
     return (
-        <div className="h-full flex flex-col gap-6 relative overflow-hidden text-white font-sans">
-            <input type="file" multiple className="hidden" ref={fileInputRef} onChange={(e) => handleFiles(e.target.files)} />
+        <div
+            ref={rowRef}
+            style={{
+                opacity: 0,                           /* GSAP reveals */
+                display: "flex", alignItems: "center",
+                gap: 9, padding: "8px 10px", marginBottom: 5,
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 7, overflow: "hidden",
+            }}
+        >
+            {/* File-type chip */}
+            <div style={{
+                width: 30, height: 30, borderRadius: 5, flexShrink: 0,
+                background: `${color}1A`,
+                border: `0.8px solid ${color}50`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "6.5px", fontWeight: 700,
+                    color, textTransform: "uppercase",
+                }}>
+                    {ext.slice(0, 4).toUpperCase()}
+                </span>
+            </div>
 
-            <div className="flex-none pb-4 border-b border-white/5 flex items-center justify-between">
-                <h2 className="text-sm font-bold uppercase tracking-[0.2em] drop-shadow-[0_0_5px_rgba(255,255,255,0.5)] flex items-center gap-3">
-                    <HardDrive size={16} className="text-[#00FFA3] animate-pulse" />
-                    Ingestion
-                </h2>
-
-                <div
-                    className={`text-[9px] font-mono px-2 py-0.5 rounded border ${
-                        loadingState.memory
-                            ? "text-[#FFD600] bg-[#FFD600]/10 border-[#FFD600]/20 animate-pulse"
-                            : systemStatus.vectorIndex === "ERROR"
-                              ? "text-[#FF4D6D] bg-[#FF4D6D]/10 border-[#FF4D6D]/30"
-                              : "text-[#00FFA3] bg-[#00FFA3]/10 border-[#00FFA3]/20"
-                    }`}
-                >
-                    {loadingState.memory ? "INDEXING" : systemStatus.vectorIndex}
+            {/* Name + size + chunk count */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: "11px", fontWeight: 500, color: "#C8D4E0",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                    {file.name}
+                </div>
+                <div style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9.5px", color: "#4E5A6A",
+                    marginTop: 2, letterSpacing: "0.02em",
+                }}>
+                    {file.size} · {file.chunks ?? 0} chunks
                 </div>
             </div>
 
-            <div
-                className={`flex-none p-6 rounded-2xl border border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center gap-3 relative overflow-hidden backdrop-blur-sm floating ${
-                    dragActive
-                        ? "bg-[#00F0FF]/20 border-[#00F0FF] shadow-[0_0_30px_rgba(0,240,255,0.3)] scale-105"
-                        : "border-white/10 bg-[#13141C]/30 hover:bg-[#13141C]/50 hover:border-[#00F0FF]/50 hover:shadow-[0_0_20px_rgba(0,240,255,0.15)]"
-                }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={onDrop}
-                onClick={handleClick}
+            {/* Status badge */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                <span style={{
+                    width: 4, height: 4, borderRadius: "50%",
+                    background: "#5BA878", flexShrink: 0,
+                }} />
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", color: "#5BA878", letterSpacing: "0.04em",
+                }}>
+                    Indexed
+                </span>
+            </div>
+
+            {/* Remove button */}
+            <button
+                onClick={handleRemove}
+                title="Remove from memory"
+                style={{
+                    background: "none", border: "none",
+                    padding: "4px 5px", cursor: "pointer",
+                    color: "#2E3A48", borderRadius: 4,
+                    display: "flex", alignItems: "center",
+                    justifyContent: "center", flexShrink: 0,
+                    transition: "color 0.16s",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#C0524A")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#2E3A48")}
+                aria-label={`Remove ${file.name}`}
             >
-                <div className="absolute inset-0 bg-gradient-to-br from-[#00F0FF]/0 to-[#00F0FF]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center border transition-transform duration-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] ${
-                        dragActive ? "bg-[#00F0FF] scale-110" : "bg-[#00F0FF]/10 border-[#00F0FF]/20 group-hover:scale-110"
-                    }`}
-                >
-                    <Upload size={20} className={`${dragActive ? "text-white" : "text-[#00F0FF] group-hover:animate-bounce"}`} />
-                </div>
-                <div className="text-center z-10 pointer-events-none">
-                    <span className="block text-xs font-semibold text-white tracking-wide group-hover:text-[#00F0FF] transition-colors">
-                        {dragActive ? "Drop to Ingest" : "Drag Cognitive Files"}
-                    </span>
-                    <span className="text-[10px] text-[#94A3B8] font-mono mt-1 group-hover:text-white/70">PDF, CSV, JSON Supported</span>
+                {/* ✕ */}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
+                    stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+                    <path d="M1.5 1.5 8.5 8.5M8.5 1.5 1.5 8.5" />
+                </svg>
+            </button>
+        </div>
+    );
+}
+
+/* ═══ MEMORY SIDEBAR ══════════════════════════════════════════════════ */
+export default function MemorySidebar() {
+    const {
+        systemStatus,
+        loadingState,
+        memoryFiles,
+        processUploadedFiles,
+    } = useCognitiveStore();
+
+    const [modalOpen, setModalOpen] = useState(false);
+
+    /* Computed totals */
+    const totalChunks = memoryFiles.reduce((acc, f) => acc + (f.chunks ?? f.pointCount ?? 0), 0);
+
+    /* ── called by IngestionModal with freshly indexed entries ── */
+    const handleAllIndexed = useCallback((entries) => {
+        if (!entries?.length) return;
+        processUploadedFiles(entries);
+        setModalOpen(false);
+    }, [processUploadedFiles]);
+
+    /* ── remove ── */
+    const removeFile = useCallback((id) => {
+        // For now, we only support mock removal if we have a store action
+        // But since this is a simulation, I'll just keep it simple.
+    }, []);
+
+
+    /* Status pill */
+    const pill = loadingState?.memory
+        ? { text: "#C8A84B", bg: "rgba(200,168,75,0.10)", border: "rgba(200,168,75,0.20)" }
+        : systemStatus?.vectorIndex === "ERROR"
+            ? { text: "#C0524A", bg: "rgba(192,82,74,0.10)", border: "rgba(192,82,74,0.28)" }
+            : { text: "#5BA878", bg: "rgba(91,168,120,0.10)", border: "rgba(91,168,120,0.22)" };
+
+    return (
+        <div style={{
+            height: "100%", display: "flex", flexDirection: "column",
+            gap: 0, overflow: "hidden", color: "#fff",
+            fontFamily: "'Inter', sans-serif",
+        }}>
+
+            {/* ── Header ─────────────────────────────────────────────── */}
+            <div style={{
+                flexShrink: 0,
+                padding: "0 0 14px",
+                borderBottom: "1px solid rgba(255,255,255,0.05)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginBottom: 14,
+            }}>
+                <h2 style={{
+                    fontSize: "11px", fontWeight: 700,
+                    letterSpacing: "0.18em", textTransform: "uppercase",
+                    color: "rgba(255,255,255,0.85)",
+                    display: "flex", alignItems: "center", gap: 9, margin: 0,
+                }}>
+                    <HardDrive size={14} style={{ color: "#4A9BB5" }} />
+                    Memory
+                </h2>
+                <div style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", letterSpacing: "0.06em",
+                    padding: "2px 8px", borderRadius: 4,
+                    color: pill.text, background: pill.bg,
+                    border: `1px solid ${pill.border}`,
+                }}>
+                    {loadingState?.memory ? "INDEXING" : (systemStatus?.vectorIndex ?? "READY")}
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col gap-3">
-                <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-widest">Active Vectors</span>
-                    <span className="text-[10px] text-[#00FFA3] font-mono">{memoryFiles.length} FILES</span>
-                </div>
+            {/* ── Upload trigger ─────────────────────────────────────── */}
+            <button
+                onClick={() => setModalOpen(true)}
+                style={{
+                    flexShrink: 0, marginBottom: 16,
+                    display: "flex", alignItems: "center",
+                    justifyContent: "center", gap: 7,
+                    width: "100%", padding: "9px 0",
+                    background: "rgba(74,155,181,0.09)",
+                    border: "1px solid rgba(74,155,181,0.28)",
+                    borderRadius: 7,
+                    fontSize: "11px", fontWeight: 600,
+                    letterSpacing: "0.07em", textTransform: "uppercase",
+                    color: "#4A9BB5", cursor: "pointer",
+                    transition: "background 0.2s, border-color 0.2s",
+                }}
+                onMouseEnter={e => {
+                    e.currentTarget.style.background = "rgba(74,155,181,0.16)";
+                    e.currentTarget.style.borderColor = "rgba(74,155,181,0.46)";
+                }}
+                onMouseLeave={e => {
+                    e.currentTarget.style.background = "rgba(74,155,181,0.09)";
+                    e.currentTarget.style.borderColor = "rgba(74,155,181,0.28)";
+                }}
+            >
+                <FolderOpen size={13} />
+                Upload Documents
+            </button>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                    {loadingState.memory ? (
-                        <div className="text-[10px] text-[#FFD600] font-mono px-2 py-3 flex items-center gap-2">
-                            <Loader2 size={12} className="animate-spin" />
-                            INDEXING FILES...
+            {/* ── File list ──────────────────────────────────────────── */}
+            <div style={{
+                flex: 1, minHeight: 0,
+                overflowY: "auto", overflowX: "hidden",
+            }}>
+                {memoryFiles.length > 0 ? (
+                    <>
+                        {/* Section label */}
+                        <div style={{
+                            fontSize: "10px", fontWeight: 500,
+                            letterSpacing: "0.1em", textTransform: "uppercase",
+                            color: "#3E4A58", marginBottom: 8,
+                        }}>
+                            Indexed Files · {memoryFiles.length}
                         </div>
-                    ) : null}
-
-                    {memoryFiles.map((file) => (
-                        <div
-                            key={file.id}
-                            className={`group flex items-center gap-3 p-3 rounded-xl bg-[#13141C]/40 border ${
-                                file.activity === "active"
-                                    ? "border-[#00F0FF]/40 shadow-[0_0_10px_rgba(0,240,255,0.1)]"
-                                    : file.status === "Indexing"
-                                      ? "border-[#FFD600]/30"
-                                      : "border-white/5"
-                            } hover:border-[#BD00FF]/50 hover:bg-[#13141C]/60 transition-all cursor-pointer backdrop-blur-sm`}
-                        >
-                            <div
-                                className={`p-2 rounded-lg relative ${
-                                    file.type === "pdf"
-                                        ? "bg-red-500/10 text-red-400"
-                                        : file.type === "csv"
-                                          ? "bg-[#00FFA3]/10 text-[#00FFA3]"
-                                          : "bg-[#00F0FF]/10 text-[#00F0FF]"
-                                }`}
-                            >
-                                <FileText size={14} />
-                                {file.activity === "active" ? (
-                                    <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-[#00F0FF] rounded-full shadow-[0_0_5px_#00F0FF] animate-ping" />
-                                ) : null}
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium text-[#E2E8F0] truncate group-hover:text-white transition-colors">{file.name}</div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[9px] text-[#94A3B8]">{file.size}</span>
-                                    {file.status === "Indexing" || loadingState.memory ? (
-                                        <span className="text-[9px] text-[#FFD600] animate-pulse font-mono">PROCESSING...</span>
-                                    ) : null}
-                                    {file.activity === "active" ? (
-                                        <span className="text-[9px] text-[#00F0FF] font-mono flex items-center gap-1">
-                                            <Activity size={8} /> IN USE
-                                        </span>
-                                    ) : null}
-                                </div>
-                            </div>
-
-                            {file.status !== "Indexing" ? (
-                                <CheckCircle size={14} className="text-[#00FFA3] drop-shadow-[0_0_5px_currentColor] opacity-50 group-hover:opacity-100 transition-opacity" />
-                            ) : null}
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            <div className="flex-none pt-4 border-t border-white/5">
-                <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] text-[#94A3B8] font-mono uppercase">Neural Capacity</span>
-                    <span className="text-[10px] text-white font-bold">{systemStatus.memoryUsage}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-[#13141C] rounded-full overflow-hidden border border-white/5">
-                    <div
-                        className="h-full bg-gradient-to-r from-[#00F0FF] via-[#BD00FF] to-[#00FFA3] shadow-[0_0_10px_rgba(0,240,255,0.5)] relative transition-all duration-1000"
-                        style={{ width: `${systemStatus.memoryUsage}%` }}
-                    >
-                        <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite]" />
+                        {memoryFiles.map(f => (
+                            <MemoryFileRow
+                                key={f.id}
+                                file={f}
+                                onRemove={removeFile}
+                            />
+                        ))}
+                    </>
+                ) : (
+                    /* Empty state */
+                    <div style={{
+                        height: "100%", display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center", justifyContent: "center",
+                        gap: 8, opacity: 0.32, userSelect: "none",
+                    }}>
+                        <FolderOpen size={22} style={{ color: "#4E5A6A" }} />
+                        <span style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: "10px", color: "#4E5A6A",
+                            letterSpacing: "0.08em", textTransform: "uppercase",
+                        }}>
+                            No files indexed
+                        </span>
                     </div>
+                )}
+            </div>
+
+            {/* ── Summary footer ─────────────────────────────────────── */}
+            <div style={{
+                flexShrink: 0,
+                borderTop: "1px solid rgba(255,255,255,0.05)",
+                paddingTop: 12, marginTop: 8,
+                display: "flex", flexDirection: "column", gap: 6,
+            }}>
+                {/* Stats row */}
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: "10px", color: "#3E4A58", letterSpacing: "0.04em",
+                    }}>
+                        {memoryFiles.length} {memoryFiles.length === 1 ? "file" : "files"}
+                    </span>
+                    <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: "10px",
+                        color: totalChunks > 0 ? "#5BA878" : "#3E4A58",
+                        letterSpacing: "0.04em",
+                    }}>
+                        {totalChunks > 0 ? `${totalChunks} chunks` : "0 chunks"}
+                    </span>
                 </div>
-                <div className="mt-2 text-center">
-                    <span className="text-[9px] text-[#94A3B8]/50 uppercase tracking-[0.2em]">0x8F2A-BLOCK-4</span>
+
+                {/* Vector store badge */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{
+                        width: 5, height: 5, borderRadius: "50%",
+                        background: memoryFiles.length > 0 ? "#5BA878" : "#3E4A58",
+                        flexShrink: 0,
+                    }} />
+                    <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: "9px", letterSpacing: "0.06em",
+                        color: memoryFiles.length > 0 ? "#5BA878" : "#3E4A58",
+                        textTransform: "uppercase",
+                    }}>
+                        Vector Store · {memoryFiles.length > 0 ? "Ready" : "Empty"}
+                    </span>
                 </div>
             </div>
+
+
+            {/* ── Modal ────────────────────────────────────────────────── */}
+            <IngestionModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                onAllIndexed={handleAllIndexed}
+            />
         </div>
     );
 }

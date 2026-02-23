@@ -3,6 +3,7 @@ import MemorySidebar from "./components/MemorySidebar";
 import ChatPanel from "./components/ChatPanel";
 import RightAnalyticsDashboard from "./components/RightAnalyticsDashboard";
 import useCognitiveStore from "./store/useCognitiveStore";
+import { useEffect } from "react";
 
 function ToastBanner() {
     const { toast } = useCognitiveStore();
@@ -18,11 +19,19 @@ function ToastBanner() {
 }
 
 export default function App() {
-    return (
-        <div className="h-screen flex flex-col w-full bg-[#090A0F] text-white font-sans antialiased selection:bg-[#BD00FF] selection:text-white overflow-hidden">
-            <Navbar className="h-14 shrink-0" />
+    const { loadMemoryFiles, loadAnalytics } = useCognitiveStore();
 
-            <div className="flex flex-1 overflow-hidden px-4 pb-4 gap-4 min-h-0">
+    useEffect(() => {
+        loadMemoryFiles();
+        loadAnalytics();
+    }, [loadMemoryFiles, loadAnalytics]);
+
+    return (
+
+        <div className="h-screen flex flex-col w-full bg-[#090A0F] text-white font-sans antialiased selection:bg-[#BD00FF] selection:text-white overflow-hidden">
+            <Navbar />
+
+            <div className="flex flex-1 overflow-hidden p-4 gap-4 min-h-0">
                 <div className="w-[20%] h-full overflow-hidden glass-panel rounded-2xl p-4">
                     <MemorySidebar />
                 </div>

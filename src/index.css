@@ -19,6 +19,7 @@
   /* Slate 400 */
 
   --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Fira Code", monospace;
 }
 
 :root {
@@ -96,4 +97,15 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 240, 255, 0.3);
+}
+
+/* FileIngestion — processing shimmer sweep */
+@keyframes shimmerSweep {
+  0% {
+    background-position: 200% center;
+  }
+
+  100% {
+    background-position: -200% center;
+  }
 }
