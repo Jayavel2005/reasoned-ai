@@ -1,4 +1,5 @@
 import Navbar from "./components/Navbar";
+import ConnectionStatusToast from "./components/ConnectionStatusToast";
 import MemorySidebar from "./components/MemorySidebar";
 import ChatPanel from "./components/ChatPanel";
 import RightAnalyticsDashboard from "./components/RightAnalyticsDashboard";
@@ -18,16 +19,35 @@ function ToastBanner() {
     );
 }
 
+function ErrorBanner() {
+    const { error } = useCognitiveStore();
+    if (!error) return null;
+
+    return (
+        <div style={{
+            position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)",
+            zIndex: 120, background: "rgba(192,82,74,0.12)",
+            border: "1px solid rgba(192,82,74,0.3)", borderRadius: 8,
+            padding: "6px 16px",
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 11,
+            color: "rgba(192,82,74,0.9)", letterSpacing: "0.04em",
+            pointerEvents: "none",
+        }}>
+            API Error: {error}
+        </div>
+    );
+}
+
 export default function App() {
-    const { loadMemoryFiles, loadAnalytics } = useCognitiveStore();
+    const { loadMemoryFiles, loadVectors, loadAnalytics } = useCognitiveStore();
 
     useEffect(() => {
         loadMemoryFiles();
+        loadVectors();
         loadAnalytics();
-    }, [loadMemoryFiles, loadAnalytics]);
+    }, [loadMemoryFiles, loadVectors, loadAnalytics]);
 
     return (
-
         <div className="h-screen flex flex-col w-full bg-[#090A0F] text-white font-sans antialiased selection:bg-[#BD00FF] selection:text-white overflow-hidden">
             <Navbar />
 
@@ -46,6 +66,8 @@ export default function App() {
             </div>
 
             <ToastBanner />
+            <ErrorBanner />
+            <ConnectionStatusToast />
         </div>
     );
 }

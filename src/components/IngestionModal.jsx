@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { gsap } from "gsap";
+import useCognitiveStore from "../store/useCognitiveStore";
 
 /* ─── constants ─────────────────────────────────────────────────────── */
 const ACCEPTED_EXT = ["pdf", "docx", "doc", "csv", "json", "md", "txt", "xlsx"];
@@ -11,9 +12,7 @@ const ACCEPTED_MIME = [
     "text/csv", "application/json", "text/markdown", "text/plain",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
-const UPLOAD_TICK_MS = 140;
-const PROCESSING_MS = 2200;
-const SUCCESS_HOLD_MS = 500; // brief success flash before auto-close
+const SUCCESS_HOLD_MS = 600; // brief success flash before auto-close
 
 /* ─── helpers ───────────────────────────────────────────────────────── */
 let _uid = 0;
@@ -195,53 +194,17 @@ function UploadRow({ file }) {
  * "indexed". Passes the final file entries so MemorySidebar can store them.
  */
 function ModalContent({ onClose, onAllIndexed }) {
+    const { uploadFiles } = useCognitiveStore();
     const [files, setFiles] = useState([]);
     const [dragging, setDragging] = useState(false);
-    const [success, setSuccess] = useState(false); // brief success flash
+    const [success, setSuccess] = useState(false);
     const inputRef = useRef(null);
     const zoneRef = useRef(null);
-    const timers = useRef({});
 
     const isProcessing = files.some(f => f.status === "uploading" || f.status === "processing");
 
-    /* ── watch for all-indexed ── */
-    useEffect(() => {
-        if (files.length === 0) return;
-        const allDone = files.every(f => f.status === "indexed" || f.status === "error");
-        if (!allDone) return;
-
-        setSuccess(true);
-        const t = setTimeout(() => {
-            onAllIndexed(files.filter(f => f.status === "indexed"));
-            onClose();
-        }, SUCCESS_HOLD_MS);
-        return () => clearTimeout(t);
-    }, [files, onAllIndexed, onClose]);
-
-    /* ── pipeline ── */
-    const runPipeline = useCallback((id) => {
-        let pct = 0;
-        const tick = setInterval(() => {
-            pct = Math.min(pct + Math.random() * 20 + 8, 100);
-            setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: Math.round(pct) } : f));
-            if (pct >= 100) {
-                clearInterval(tick);
-                delete timers.current[`t_${id}`];
-                setFiles(prev => prev.map(f => f.id === id
-                    ? { ...f, status: "processing", progress: 100 } : f));
-                timers.current[`p_${id}`] = setTimeout(() => {
-                    const chunks = Math.floor(Math.random() * 40 + 20);
-                    setFiles(prev => prev.map(f => f.id === id
-                        ? { ...f, status: "indexed", chunks } : f));
-                    delete timers.current[`p_${id}`];
-                }, PROCESSING_MS);
-            }
-        }, UPLOAD_TICK_MS);
-        timers.current[`t_${id}`] = tick;
-    }, []);
-
-    /* ── ingest ── */
-    const ingest = useCallback((rawFiles) => {
+    /* ── ingest: kick off real API upload ── */
+    const ingest = useCallback(async (rawFiles) => {
         const incoming = Array.from(rawFiles ?? []).filter(file => {
             const ext = extOf(file.name);
             if (!ACCEPTED_EXT.includes(ext)) return false;
@@ -249,24 +212,47 @@ function ModalContent({ onClose, onAllIndexed }) {
         });
         if (!incoming.length) return;
 
+        // Build local display entries
         const entries = incoming.map(f => ({
             id: uid(),
             name: f.name,
             size: fmtSz(f.size),
             _size: f.size,
-            status: "uploading",
-            progress: 0,
+            status: "processing",  // shimmer from the start (server is doing the work)
+            progress: 100,
             chunks: 0,
         }));
         setFiles(prev => [...prev, ...entries]);
-        entries.forEach(e => runPipeline(e.id));
-    }, [files, runPipeline]);
 
-    /* ── cleanup ── */
-    useEffect(() => {
-        const t = timers.current;
-        return () => Object.values(t).forEach(h => { clearInterval(h); clearTimeout(h); });
-    }, []);
+        try {
+            // Real API call through the store (also refreshes vectors + analytics)
+            await uploadFiles(incoming);
+
+            // Mark all entries as indexed
+            setFiles(prev =>
+                prev.map(f =>
+                    entries.some(e => e.id === f.id)
+                        ? { ...f, status: "indexed" }
+                        : f
+                )
+            );
+
+            setSuccess(true);
+            setTimeout(() => {
+                onAllIndexed(entries.map(e => ({ ...e, status: "indexed" })));
+                onClose();
+            }, SUCCESS_HOLD_MS);
+        } catch (err) {
+            setFiles(prev =>
+                prev.map(f =>
+                    entries.some(e => e.id === f.id)
+                        ? { ...f, status: "error", error: err.message ?? "Upload failed" }
+                        : f
+                )
+            );
+        }
+    }, [files, uploadFiles, onAllIndexed, onClose]);
+
 
     /* ── drag ── */
     const onDragEnter = (e) => {

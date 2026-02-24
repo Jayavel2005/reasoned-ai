@@ -3,8 +3,11 @@ import {
 } from "react";
 import { Send, Cpu } from "lucide-react";
 import { gsap } from "gsap";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import useCognitiveStore from "../store/useCognitiveStore";
 import ReasoningContextBar from "./ReasoningContextBar";
+import { cleanLLMOutput } from "../utils/cleanLLMOutput";
 
 /* ══════════════════════════════════════════════════════════════════════
    NEURAL NETWORK BACKGROUND
@@ -333,6 +336,151 @@ function TypingIndicator() {
     );
 }
 
+/* InlineMarkdown is now handled by ReactMarkdown */
+
+function ReasoningBlock({ content }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <div style={{
+            margin: "6px 0 10px",
+            border: "1px solid rgba(74,155,181,0.18)",
+            borderLeft: "2px solid rgba(74,155,181,0.4)",
+            borderRadius: "2px 8px 8px 2px",
+            overflow: "hidden",
+            background: "rgba(74,155,181,0.03)",
+        }}>
+            <button
+                onClick={() => setOpen(o => !o)}
+                style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 8,
+                    padding: "7px 12px",
+                    background: open ? "rgba(74,155,181,0.07)" : "rgba(74,155,181,0.04)",
+                    border: "none", cursor: "pointer",
+                    borderBottom: open ? "1px solid rgba(74,155,181,0.12)" : "none",
+                    transition: "background 0.2s",
+                }}
+            >
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase",
+                    color: "rgba(74,155,181,0.6)",
+                }}>
+                    ◈ Reasoning trace
+                </span>
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: "9px", color: "rgba(74,155,181,0.35)",
+                    marginLeft: "auto",
+                }}>
+                    {open ? "▲ collapse" : "▼ expand"}
+                </span>
+            </button>
+            {open && (
+                <div style={{ padding: "10px 14px" }}>
+                    <pre style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: "11px", lineHeight: 1.7,
+                        color: "rgba(180,195,210,0.6)",
+                        whiteSpace: "pre-wrap", wordBreak: "break-word",
+                        margin: 0,
+                    }}>
+                        {content.trim()}
+                    </pre>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function MarkdownRenderer({ text }) {
+    if (!text) return null;
+
+    // ── 0. Strip / Prepare ───────────────────────────────────────────
+    const cleaned = cleanLLMOutput(text);
+
+    // ── 1. Segment reasoning and markdown ────────────────────────────
+    const blocks = [];
+    const reasoningRegex = /<REASONING>([\s\S]*?)<\/REASONING>/gi;
+    let cursor = 0;
+    let rm;
+    while ((rm = reasoningRegex.exec(cleaned)) !== null) {
+        if (rm.index > cursor) {
+            blocks.push({ type: "md", content: cleaned.slice(cursor, rm.index) });
+        }
+        blocks.push({ type: "reasoning", content: rm[1] });
+        cursor = reasoningRegex.lastIndex;
+    }
+    if (cursor < cleaned.length) {
+        blocks.push({ type: "md", content: cleaned.slice(cursor) });
+    }
+
+    // ── 2. Render ────────────────────────────────────────────────────
+    return (
+        <div style={{
+            fontFamily: "'Inter', sans-serif",
+            fontSize: "13.5px", lineHeight: 1.7,
+            color: "#D4DDE8",
+            letterSpacing: "0.01em",
+        }}>
+            {blocks.map((block, bi) => {
+                if (block.type === "reasoning") {
+                    return <ReasoningBlock key={bi} content={block.content} />;
+                }
+
+                return (
+                    <ReactMarkdown
+                        key={bi}
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                            p: ({ children }) => <p style={{ margin: "0 0 12px", color: "#D4DDE8" }}>{children}</p>,
+                            h1: ({ children }) => <h1 style={{ fontSize: "18px", fontWeight: 700, margin: "20px 0 10px", color: "#E8EDF3", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "4px" }}>{children}</h1>,
+                            h2: ({ children }) => <h2 style={{ fontSize: "16px", fontWeight: 700, margin: "18px 0 8px", color: "#E8EDF3", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "4px" }}>{children}</h2>,
+                            h3: ({ children }) => <h3 style={{ fontSize: "14px", fontWeight: 600, margin: "14px 0 6px", color: "#C8D4E0" }}>{children}</h3>,
+                            h4: ({ children }) => <h4 style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", fontWeight: 600, margin: "10px 0 4px", color: "rgba(74,155,181,0.8)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{children}</h4>,
+                            li: ({ children }) => <li style={{ marginBottom: "4px", color: "#C8D4E0" }}>{children}</li>,
+                            ul: ({ children }) => <ul style={{ margin: "10px 0 14px 20px", listStyleType: "disc" }}>{children}</ul>,
+                            ol: ({ children }) => <ol style={{ margin: "10px 0 14px 20px", listStyleType: "decimal" }}>{children}</ol>,
+                            code: ({ node, inline, children, ...props }) => (
+                                <code
+                                    style={{
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        background: "rgba(255,255,255,0.06)",
+                                        padding: inline ? "2px 5px" : "12px",
+                                        borderRadius: 4,
+                                        fontSize: inline ? "11px" : "12px",
+                                        display: inline ? "inline" : "block",
+                                        overflowX: "auto",
+                                        border: "1px solid rgba(255,255,255,0.08)",
+                                        color: "#4A9BB5",
+                                        margin: inline ? 0 : "12px 0",
+                                    }}
+                                    {...props}
+                                >
+                                    {children}
+                                </code>
+                            ),
+                            table: ({ children }) => (
+                                <div style={{ overflowX: "auto", margin: "16px 0" }}>
+                                    <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, overflow: "hidden" }}>
+                                        {children}
+                                    </table>
+                                </div>
+                            ),
+                            thead: ({ children }) => <thead style={{ background: "rgba(74,155,181,0.1)", borderBottom: "2px solid rgba(74,155,181,0.2)" }}>{children}</thead>,
+                            th: ({ children }) => <th style={{ padding: "8px 12px", textAlign: "left", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#4A9BB5" }}>{children}</th>,
+                            td: ({ children }) => <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "12.5px" }}>{children}</td>,
+                            blockquote: ({ children }) => <blockquote style={{ margin: "16px 0", padding: "8px 20px", borderLeft: "3px solid #4A9BB5", background: "rgba(74,155,181,0.04)", color: "#C8D4E0", fontStyle: "italic" }}>{children}</blockquote>,
+                            hr: () => <hr style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.07)", margin: "20px 0" }} />,
+                        }}
+                    >
+                        {block.content}
+                    </ReactMarkdown>
+                );
+            })}
+        </div>
+    );
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    MESSAGE BUBBLE
 ══════════════════════════════════════════════════════════════════════ */
@@ -399,34 +547,95 @@ function MessageBubble({ message }) {
 
                 {/* Bubble */}
                 <div style={{
-                    padding: "11px 16px",
+                    padding: message.isAutoSummary ? "0" : "11px 16px",
                     borderRadius: isUser ? "14px 2px 14px 14px" : "2px 14px 14px 14px",
                     background: isUser
                         ? "rgba(189,0,255,0.07)"
-                        : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${isUser ? "rgba(189,0,255,0.20)" : "rgba(255,255,255,0.08)"}`,
+                        : message.isAutoSummary
+                            ? "transparent"
+                            : "rgba(255,255,255,0.03)",
+                    border: isUser
+                        ? "1px solid rgba(189,0,255,0.20)"
+                        : message.isAutoSummary
+                            ? "none"
+                            : "1px solid rgba(255,255,255,0.08)",
                     backdropFilter: "blur(8px)",
                     position: "relative",
                     overflow: "hidden",
+                    width: "100%",
                 }}>
-                    {/* Subtle top sheen */}
-                    <div style={{
-                        position: "absolute", top: 0, left: 0, right: 0, height: 1,
-                        background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
-                    }} />
+                    {/* Top sheen — non-summary only */}
+                    {!message.isAutoSummary && (
+                        <div style={{
+                            position: "absolute", top: 0, left: 0, right: 0, height: 1,
+                            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
+                        }} />
+                    )}
 
-                    <p style={{
-                        fontFamily: "'Inter', sans-serif",
-                        fontSize: "13px", lineHeight: 1.65,
-                        color: "#D4DDE8",
-                        margin: 0, whiteSpace: "pre-wrap",
-                        letterSpacing: "0.01em",
-                    }}>
-                        {message.text}
-                    </p>
+                    {/* ── Auto-summary: special card layout ── */}
+                    {message.isAutoSummary ? (
+                        <div style={{
+                            background: "rgba(74,155,181,0.04)",
+                            border: "1px solid rgba(74,155,181,0.16)",
+                            borderLeft: "2px solid rgba(74,155,181,0.45)",
+                            borderRadius: "2px 10px 10px 2px",
+                            overflow: "hidden",
+                        }}>
+                            {/* Banner header */}
+                            <div style={{
+                                display: "flex", alignItems: "center", gap: 8,
+                                padding: "10px 14px",
+                                borderBottom: "1px solid rgba(74,155,181,0.1)",
+                                background: "rgba(74,155,181,0.06)",
+                            }}>
+                                <span style={{
+                                    width: 6, height: 6, borderRadius: "50%",
+                                    background: "#5BA878",
+                                    boxShadow: "0 0 6px #5BA878",
+                                    flexShrink: 0,
+                                }} />
+                                <span style={{
+                                    fontFamily: "'IBM Plex Mono', monospace",
+                                    fontSize: "9px", letterSpacing: "0.1em",
+                                    textTransform: "uppercase",
+                                    color: "rgba(91,168,120,0.7)",
+                                }}>
+                                    Knowledge Base · Analysis Complete
+                                </span>
+                                <div style={{ flex: 1 }} />
+                                <span style={{
+                                    fontFamily: "'IBM Plex Mono', monospace",
+                                    fontSize: "8px", color: "rgba(74,155,181,0.35)",
+                                    letterSpacing: "0.05em",
+                                }}>
+                                    {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                            </div>
+                            {/* Summary body */}
+                            <div style={{ padding: "12px 14px" }}>
+                                <MarkdownRenderer text={cleanLLMOutput(message.text)} />
+                            </div>
+                        </div>
+                    ) : (
+                        /* ── Regular message ── */
+                        isUser ? (
+                            <p style={{
+                                fontFamily: "'Inter', sans-serif",
+                                fontSize: "13px", lineHeight: 1.65,
+                                color: "#D4DDE8",
+                                margin: 0, whiteSpace: "pre-wrap",
+                                letterSpacing: "0.01em",
+                            }}>
+                                {message.text}
+                            </p>
+                        ) : (
+                            /* AI — full markdown render */
+                            <MarkdownRenderer text={message.text} />
+                        )
+                    )}
 
-                    {/* AI metadata */}
-                    {!isUser && (message.intent || (Array.isArray(message.sources) && message.sources.length > 0)) && (
+                    {/* AI metadata — skip for auto-summary (sources shown in banner) */}
+                    {!isUser && !message.isAutoSummary && (message.intent || (Array.isArray(message.sources) && message.sources.length > 0)) && (
                         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
                             {message.intent && (
                                 <span style={{
@@ -443,7 +652,7 @@ function MessageBubble({ message }) {
                                     fontSize: "9px", color: "rgba(74,155,181,0.6)",
                                     letterSpacing: "0.04em",
                                 }}>
-                                    Sources: {message.sources.join(", ")}
+                                    Sources: {message.sources.map(s => s?.source ?? s).join(", ")}
                                 </span>
                             )}
                         </div>
@@ -1201,7 +1410,8 @@ function PanelHeader({ engineState, connection }) {
 }
 
 export default function ChatPanel() {
-    const { messages, sendQuery, loadingState, systemStatus, chunks } = useCognitiveStore();
+    const { messages, sendQuery, loadingState, systemStatus, vectorResults } = useCognitiveStore();
+    const chunks = vectorResults ?? [];
     const messagesEndRef = useRef(null);
     const flashRef = useRef(null);
     const prevMsgCount = useRef(messages.length);
@@ -1247,20 +1457,24 @@ export default function ChatPanel() {
     }, [sendQuery, input]);
 
     /* ── Suggestion visibility ──
-       Show  : at least one system message exists + no user/AI messages + input empty
-       Hide  : as soon as any user or AI message appears                              */
-    const hasSystemMsg = messages.some(m => m.sender === "system");
-    const hasUserMsg = messages.some(m => m.sender === "user" || m.sender === "ai");
-    const showSuggestions = hasSystemMsg && !hasUserMsg && input.trim() === "";
+       Show  : at least one system/auto-summary message exists + no real user/AI
+               conversation initiated + input empty
+       Hide  : as soon as any real (non-auto-summary) user or AI message appears    */
+    const hasSystemMsg = messages.some(m => m.sender === "system" || m.isAutoSummary);
+    const hasRealConv = messages.some(m => (m.sender === "user" || m.sender === "ai") && !m.isAutoSummary);
+    const showSuggestions = hasSystemMsg && !hasRealConv && input.trim() === "";
 
     /* ── Follow-up questions state ──
-       Derived from the last AI message text.
-       Cleared as soon as the user submits a new query.
-       Re-generated when a new AI message arrives (via useEffect on messages).       */
+       For auto-summary messages: use the curated followUps from the store.
+       For regular AI responses: derive from response text via NLP extractor.        */
     const followUpQuestions = useMemo(() => {
         const lastAi = [...messages].reverse().find((m) => m.sender === "ai");
         if (!lastAi) return [];
-        if (Array.isArray(lastAi.followUps)) return lastAi.followUps;
+        // Always prefer a pre-set followUps array (set by auto-summary or chat handler)
+        if (Array.isArray(lastAi.followUps) && lastAi.followUps.length > 0)
+            return lastAi.followUps;
+        // For auto-summary without followUps: return nothing (suggestions block handles it)
+        if (lastAi.isAutoSummary) return [];
         return generateFollowUps(lastAi.text ?? "");
     }, [messages]);
 

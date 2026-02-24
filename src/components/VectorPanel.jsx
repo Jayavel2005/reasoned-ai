@@ -2,7 +2,8 @@ import { useRef, useMemo, useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, Line, Sparkles, Grid } from "@react-three/drei";
-import { Maximize2, Minimize2, Bot, Loader2, X } from "lucide-react";
+import { Maximize2, Bot, Loader2, X } from "lucide-react";
+import * as THREE from "three";
 import { gsap } from "gsap";
 import useCognitiveStore from "../store/useCognitiveStore";
 
@@ -12,14 +13,81 @@ import useCognitiveStore from "../store/useCognitiveStore";
 /* ──────────────────────────────────────────────────────────────────────
    3D SCENE COMPONENTS
    ────────────────────────────────────────────────────────────────────── */
-function DataPoint({ node, isSelected, isSelectionActive, queryVector, onSelect, onHover }) {
+/* ──────────────────────────────────────────────────────────────────────
+   SCAN RING — pulsing toroidal wave that radiates during retrieval
+────────────────────────────────────────────────────────────────────── */
+function ScanRing({ isScanning }) {
+    const meshRef = useRef();
+    const matRef = useRef();
+    // Animate: expand from radius 0 → 180, fade opacity, loop while scanning
+    useFrame((state) => {
+        if (!meshRef.current || !matRef.current) return;
+        if (!isScanning) {
+            matRef.current.opacity = 0;
+            return;
+        }
+        const t = (state.clock.elapsedTime * 0.55) % 1.0;
+        const r = t * 190;
+        meshRef.current.scale.setScalar(r / 3.5);
+        // Fade: bright at 0.1, transparent at 1.0
+        matRef.current.opacity = Math.max(0, (1 - t) * 0.55 * Math.min(t * 8, 1));
+    });
+    return (
+        <mesh ref={meshRef} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[3.5, 0.18, 8, 80]} />
+            <meshStandardMaterial
+                ref={matRef}
+                color="#00F0FF"
+                emissive="#00F0FF"
+                emissiveIntensity={4}
+                transparent
+                opacity={0}
+                toneMapped={false}
+                depthWrite={false}
+            />
+        </mesh>
+    );
+}
+
+/* Second ring at offset phase */
+function ScanRing2({ isScanning }) {
+    const meshRef = useRef();
+    const matRef = useRef();
+    useFrame((state) => {
+        if (!meshRef.current || !matRef.current) return;
+        if (!isScanning) { matRef.current.opacity = 0; return; }
+        const t = ((state.clock.elapsedTime * 0.55) + 0.45) % 1.0;
+        const r = t * 190;
+        meshRef.current.scale.setScalar(r / 3.5);
+        matRef.current.opacity = Math.max(0, (1 - t) * 0.45 * Math.min(t * 8, 1));
+    });
+    return (
+        <mesh ref={meshRef} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[3.5, 0.12, 8, 80]} />
+            <meshStandardMaterial
+                ref={matRef}
+                color="#BD00FF"
+                emissive="#BD00FF"
+                emissiveIntensity={3}
+                transparent
+                opacity={0}
+                toneMapped={false}
+                depthWrite={false}
+            />
+        </mesh>
+    );
+}
+
+function DataPoint({ node, isSelected, isSelectionActive, queryVector, onSelect, onHover, isScanning }) {
     const mesh = useRef();
     const material = useRef();
     const [hovered, setHovered] = useState(false);
+    // Each node gets a random scan phase so the wave ripples across the field
+    const scanPhaseOffset = useMemo(() => Math.random() * Math.PI * 2, []);
 
     // Initial and Default sizes
-    const baseScale = 0.45; // Increased by ~30% from 0.35
-    const selectedScale = baseScale * 1.4;
+    const baseScale = 0.75;
+    const selectedScale = baseScale * 1.45;
 
     useLayoutEffect(() => {
         if (!mesh.current || !material.current) return;
@@ -98,15 +166,26 @@ function DataPoint({ node, isSelected, isSelectionActive, queryVector, onSelect,
     }, [isSelected, isSelectionActive, queryVector, hovered, node.position, baseScale, selectedScale]);
 
     useFrame((state) => {
-        if (mesh.current) {
-            // Subtle pulse (Part 2.4 - remains after animation)
+        if (!mesh.current || !material.current) return;
+
+        if (isScanning) {
+            // Rolling wave: each node lights up at a different phase
+            const wave = Math.sin(state.clock.elapsedTime * 3.5 + scanPhaseOffset);
+            const scanEmissive = Math.max(0, wave) * 6 + 1.0;
+            material.current.emissiveIntensity = scanEmissive;
+            // Scale breathe during scan
+            const breathe = 1 + Math.abs(Math.sin(state.clock.elapsedTime * 2.8 + scanPhaseOffset)) * 0.25;
+            mesh.current.scale.setScalar(baseScale * breathe);
+        } else {
+            // Normal subtle pulse
             const pulseAmount = isSelected ? 0.08 : 0.03;
             const pulseFreq = isSelected ? 4 : 1.5;
             const s = 1 + Math.sin(state.clock.elapsedTime * pulseFreq) * pulseAmount;
-
-            // Apply pulse on top of current scale
             const base = hovered ? 1.1 : 1.0;
             mesh.current.scale.setScalar((isSelected ? selectedScale : baseScale) * s * base);
+            // Restore normal emissive
+            const targetEmissive = isSelected ? (hovered ? 7 : 5) : (hovered ? 3 : 1.8);
+            material.current.emissiveIntensity += (targetEmissive - material.current.emissiveIntensity) * 0.1;
         }
     });
 
@@ -130,7 +209,7 @@ function DataPoint({ node, isSelected, isSelectionActive, queryVector, onSelect,
                 ref={material}
                 color={node.color || "#00F0FF"}
                 emissive={node.color || "#00F0FF"}
-                emissiveIntensity={isSelected ? (hovered ? 6 : 4) : (hovered ? 2.5 : 1.2)}
+                emissiveIntensity={isSelected ? (hovered ? 7 : 5) : (hovered ? 3 : 1.8)}
                 transparent
                 opacity={0.75}
                 toneMapped={false}
@@ -238,23 +317,67 @@ function ProgressiveLine({ start, end, color }) {
     );
 }
 
-function Scene({ nodes, queryVector, selectedChunkIds, onNodeSelect, onHover }) {
+/* ──────────────────────────────────────────────────────────────────────
+   COLOR LEGEND — doc_type labels with swatches
+────────────────────────────────────────────────────────────────────── */
+const DOC_TYPE_LEGEND = [
+    { label: "SOP", color: "#00F0FF", key: "Standard_Operating_Procedure" },
+    { label: "Maintenance", color: "#9D4EDD", key: "Maintenance_Manual" },
+    { label: "Fault Log", color: "#FF4D6D", key: "Historical_Fault_Log" },
+    { label: "Rulebook", color: "#FFD60A", key: "Equipment_Rulebook" },
+    { label: "Data Log", color: "#06D6A0", key: "Continuous_Data_Log" },
+];
+
+function ColorLegend() {
+    return (
+        <div style={{
+            position: "absolute", bottom: 16, left: 16, zIndex: 10,
+            display: "flex", flexDirection: "column", gap: 5,
+            pointerEvents: "none",
+        }}>
+            {DOC_TYPE_LEGEND.map(({ label, color }) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{
+                        width: 8, height: 8, borderRadius: "50%",
+                        background: color,
+                        boxShadow: `0 0 8px ${color}`,
+                        flexShrink: 0,
+                    }} />
+                    <span style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: 8,
+                        color: "rgba(200,212,225,0.55)",
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                    }}>{label}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function Scene({ nodes, queryVector, selectedChunkIds, onNodeSelect, onHover, isScanning }) {
     const isSelectionActive = selectedChunkIds.length > 0;
 
     return (
         <>
-            <ambientLight intensity={0.4} />
-            <pointLight position={[20, 30, 20]} intensity={1.5} color="#BD00FF" />
-            <pointLight position={[-20, -30, -20]} intensity={1.5} color="#00F0FF" />
+            <ambientLight intensity={isScanning ? 0.9 : 0.6} />
+            <pointLight position={[20, 30, 20]} intensity={isScanning ? 3.5 : 2.0} color="#BD00FF" />
+            <pointLight position={[-20, -30, -20]} intensity={isScanning ? 3.5 : 2.0} color="#00F0FF" />
+            <pointLight position={[0, 60, 0]} intensity={isScanning ? 2.0 : 1.0} color="#ffffff" />
 
             <Grid
-                position={[0, -25, 0]} args={[120, 120]}
-                cellSize={10} cellThickness={1}
+                position={[0, -55, 0]} args={[400, 400]}
+                cellSize={20} cellThickness={0.8}
                 cellColor="#00f0ff"
-                sectionSize={50} sectionThickness={1.5}
+                sectionSize={100} sectionThickness={1.5}
                 sectionColor="#bd00ff"
-                fadeDistance={150} fadeStrength={1}
+                fadeDistance={500} fadeStrength={1}
             />
+
+            {/* Scan rings — only visible during retrieval */}
+            <ScanRing isScanning={isScanning} />
+            <ScanRing2 isScanning={isScanning} />
 
             {/* Context Lines (Progressive) */}
             {queryVector && selectedChunkIds.map(id => {
@@ -283,10 +406,18 @@ function Scene({ nodes, queryVector, selectedChunkIds, onNodeSelect, onHover }) 
                     queryVector={queryVector}
                     onSelect={onNodeSelect}
                     onHover={onHover}
+                    isScanning={isScanning}
                 />
             ))}
 
-            <Sparkles count={100} scale={100} size={1} speed={0.2} opacity={0.2} color="#ffffff" />
+            <Sparkles
+                count={isScanning ? 400 : 200}
+                scale={300}
+                size={isScanning ? 2.5 : 1.5}
+                speed={isScanning ? 0.55 : 0.15}
+                opacity={isScanning ? 0.35 : 0.15}
+                color={isScanning ? "#00F0FF" : "#ffffff"}
+            />
         </>
     );
 }
@@ -473,12 +604,97 @@ function NodeInspector({ node, loading, onClose }) {
 /* ──────────────────────────────────────────────────────────────────────
    CANVAS CONTENT (shared between inline & modal)
    ────────────────────────────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────────
+   RETRIEVAL HUD — shown during chat query processing
+────────────────────────────────────────────────────────────────────── */
+const RETRIEVAL_PHASES = [
+    { label: "EMBEDDING QUERY", color: "#BD00FF", bg: "rgba(189,0,255,0.08)", border: "rgba(189,0,255,0.28)" },
+    { label: "VECTOR SEARCH", color: "#00F0FF", bg: "rgba(0,240,255,0.08)", border: "rgba(0,240,255,0.28)" },
+    { label: "RANKING CONTEXT", color: "#00FFA3", bg: "rgba(0,255,163,0.07)", border: "rgba(0,255,163,0.25)" },
+    { label: "SYNTHESISING ANSWER", color: "#FFD600", bg: "rgba(255,214,0,0.07)", border: "rgba(255,214,0,0.22)" },
+];
+
+function RetrievalHUD({ isScanning }) {
+    const [phase, setPhase] = useState(0);
+    const [blink, setBlink] = useState(true);
+    const timerRef = useRef(null);
+
+    useEffect(() => {
+        if (!isScanning) {
+            setPhase(0);
+            clearInterval(timerRef.current);
+            return;
+        }
+        setPhase(0);
+        timerRef.current = setInterval(() => {
+            setPhase(p => (p + 1) % RETRIEVAL_PHASES.length);
+        }, 900);
+        return () => clearInterval(timerRef.current);
+    }, [isScanning]);
+
+    // Blink cursor
+    useEffect(() => {
+        const id = setInterval(() => setBlink(b => !b), 530);
+        return () => clearInterval(id);
+    }, []);
+
+    if (!isScanning) return null;
+
+    const p = RETRIEVAL_PHASES[phase];
+    return (
+        <div style={{
+            position: "absolute", top: 62, left: 16, zIndex: 10,
+            display: "flex", flexDirection: "column", gap: 6,
+            pointerEvents: "none",
+        }}>
+            {/* Main phase badge */}
+            <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                background: p.bg,
+                border: `1px solid ${p.border}`,
+                borderRadius: 7, padding: "6px 12px",
+                backdropFilter: "blur(10px)",
+                boxShadow: `0 0 18px ${p.color}22`,
+                transition: "all 0.3s ease",
+            }}>
+                <Loader2
+                    size={11}
+                    color={p.color}
+                    style={{ animation: "vp-spin 0.8s linear infinite", flexShrink: 0 }}
+                />
+                <span style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: 9, letterSpacing: "0.10em",
+                    color: p.color, fontWeight: 600,
+                }}>
+                    {p.label}
+                    <span style={{ opacity: blink ? 1 : 0 }}>_</span>
+                </span>
+            </div>
+
+            {/* Phase dots */}
+            <div style={{ display: "flex", gap: 4, paddingLeft: 4 }}>
+                {RETRIEVAL_PHASES.map((ph, i) => (
+                    <div key={i} style={{
+                        width: i === phase ? 14 : 5,
+                        height: 5, borderRadius: 3,
+                        background: i === phase ? ph.color : "rgba(255,255,255,0.12)",
+                        transition: "all 0.3s ease",
+                        boxShadow: i === phase ? `0 0 6px ${ph.color}` : "none",
+                    }} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function VectorCanvas({
     nodes, queryVector, selectedChunkIds, similarityScores,
     selectedNode, loadingState, onNodeSelect, isModal
 }) {
     const { setSelectedNode, setHoveredChunk, hoveredChunk } = useCognitiveStore();
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const isScanning = !!loadingState?.chat;
 
     useEffect(() => {
         const handleMouseMove = (e) => {
@@ -488,11 +704,11 @@ function VectorCanvas({
         return () => window.removeEventListener("mousemove", handleMouseMove);
     }, []);
 
-
     return (
         <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+            <style>{`@keyframes vp-spin { to { transform: rotate(360deg); } }`}</style>
             <Canvas
-                camera={{ position: [60, 40, 60], fov: 45 }}
+                camera={{ position: [120, 80, 120], fov: 50 }}
                 dpr={[1, 2]}
                 style={{ borderRadius: isModal ? 14 : 10, background: "#05060A" }}
             >
@@ -502,13 +718,14 @@ function VectorCanvas({
                     selectedChunkIds={selectedChunkIds}
                     onNodeSelect={onNodeSelect}
                     onHover={setHoveredChunk}
+                    isScanning={isScanning}
                 />
                 <OrbitControls
                     enableZoom enablePan
                     autoRotate={!selectedNode && !queryVector}
-                    autoRotateSpeed={0.3}
+                    autoRotateSpeed={isScanning ? 1.8 : 0.4}
                     maxPolarAngle={Math.PI / 2 + 0.1}
-                    minDistance={10} maxDistance={150}
+                    minDistance={30} maxDistance={500}
                     target={[0, 0, 0]} dampingFactor={0.05}
                 />
             </Canvas>
@@ -521,6 +738,8 @@ function VectorCanvas({
                 mouseY={mousePos.y}
             />
 
+            {/* Color Legend */}
+            <ColorLegend />
 
             {/* Status Overlays */}
             <div style={{ position: "absolute", top: 16, left: 16, zIndex: 10, pointerEvents: "none" }}>
@@ -529,34 +748,51 @@ function VectorCanvas({
                     fontWeight: 700, color: "#fff",
                     textTransform: "uppercase", letterSpacing: "0.15em",
                     display: "flex", alignItems: "center", gap: 8,
-                    textShadow: "0 0 15px rgba(0,240,255,0.4)",
-                    marginBottom: 4
+                    textShadow: isScanning ? "0 0 20px rgba(0,240,255,0.7)" : "0 0 15px rgba(0,240,255,0.4)",
+                    marginBottom: 4,
+                    transition: "text-shadow 0.4s",
                 }}>
                     Cognitive Retrieval Field
                     <div style={{
                         width: 7, height: 7, borderRadius: "50%",
-                        background: queryVector ? "#00FFA3" : "#00F0FF",
-                        boxShadow: `0 0 10px ${queryVector ? "#00FFA3" : "#00F0FF"}`
+                        background: isScanning ? "#BD00FF" : queryVector ? "#00FFA3" : "#00F0FF",
+                        boxShadow: isScanning
+                            ? "0 0 14px #BD00FF, 0 0 30px #BD00FF55"
+                            : `0 0 10px ${queryVector ? "#00FFA3" : "#00F0FF"}`,
+                        animation: isScanning ? "vp-pulse 0.8s ease-in-out infinite alternate" : "none",
+                        transition: "all 0.3s",
                     }} />
                 </h2>
                 <div style={{
                     display: "flex", gap: 14,
                     fontFamily: "'IBM Plex Mono'", fontSize: 8.5,
                     color: "rgba(148,163,184,0.5)",
-                    letterSpacing: "0.05em"
+                    letterSpacing: "0.05em",
                 }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <div style={{ width: 4, height: 4, borderRadius: "50%", border: "1px solid currentColor" }} />
                         MEMORIES: {nodes.length}
                     </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 4, color: selectedChunkIds.length ? "#00FFA3" : "inherit" }}>
-                        <div style={{ width: 4, height: 4, borderRadius: "50%", background: selectedChunkIds.length ? "#00FFA3" : "transparent", border: "1px solid currentColor" }} />
-                        PIPELINE: {selectedChunkIds.length ? "RETRIEVAL_ACTIVE" : "STANDBY"}
+                    <span style={{
+                        display: "flex", alignItems: "center", gap: 4,
+                        color: isScanning ? "#BD00FF" : selectedChunkIds.length ? "#00FFA3" : "inherit",
+                        transition: "color 0.3s",
+                    }}>
+                        <div style={{
+                            width: 4, height: 4, borderRadius: "50%",
+                            background: isScanning ? "#BD00FF" : selectedChunkIds.length ? "#00FFA3" : "transparent",
+                            border: "1px solid currentColor",
+                        }} />
+                        PIPELINE: {isScanning ? "SCANNING" : selectedChunkIds.length ? "RETRIEVAL_ACTIVE" : "STANDBY"}
                     </span>
                 </div>
             </div>
 
-            {loadingState?.vectors && (
+            {/* Retrieval phase HUD */}
+            <RetrievalHUD isScanning={isScanning} />
+
+            {/* Vectors loading (index refresh) */}
+            {loadingState?.vectors && !isScanning && (
                 <div style={{
                     position: "absolute", top: 62, left: 16, zIndex: 10,
                     display: "flex", alignItems: "center", gap: 10,
@@ -564,12 +800,19 @@ function VectorCanvas({
                     background: "rgba(13,16,23,0.9)", border: "1px solid rgba(0,240,255,0.3)",
                     borderRadius: 8, padding: "6px 12px",
                     boxShadow: "0 8px 16px rgba(0,0,0,0.4)",
-                    backdropFilter: "blur(8px)"
+                    backdropFilter: "blur(8px)",
                 }}>
-                    <Loader2 size={12} className="animate-spin" />
-                    SIMULATING EMBEDDINGS...
+                    <Loader2 size={12} style={{ animation: "vp-spin 1s linear infinite" }} />
+                    SYNCING INDEX...
                 </div>
             )}
+
+            <style>{`
+                @keyframes vp-pulse {
+                    from { transform: scale(1); opacity: 0.8; }
+                    to   { transform: scale(1.6); opacity: 1; }
+                }
+            `}</style>
 
             <NodeInspector
                 node={selectedNode}
@@ -623,36 +866,36 @@ function VectorModal({ onClose, nodes, queryVector, selectedChunkIds, similarity
     return createPortal(
         <div ref={modalScopeRef}>
             <div ref={backdropRef} onClick={handleClose} style={{
-            position: "fixed", inset: 0, zIndex: 9000,
-            background: "rgba(4,5,9,0.85)", backdropFilter: "blur(8px)",
-            display: "flex", alignItems: "center", justifyContent: "center", padding: 32,
-        }}>
-            <div ref={cardRef} onClick={e => e.stopPropagation()} style={{
-                position: "relative", width: "100%", maxWidth: 1200, height: "85vh",
-                background: "#090A0F", border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 20, overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
+                position: "fixed", inset: 0, zIndex: 9000,
+                background: "rgba(4,5,9,0.85)", backdropFilter: "blur(8px)",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 32,
             }}>
-                <VectorCanvas
-                    nodes={nodes}
-                    queryVector={queryVector}
-                    selectedChunkIds={selectedChunkIds}
-                    similarityScores={similarityScores}
-                    selectedNode={selectedNode}
-                    loadingState={loadingState}
-                    onNodeSelect={onNodeSelect}
-                    isModal
-                />
-                <button onClick={handleClose} style={{
-                    position: "absolute", top: 16, right: 16, zIndex: 20,
-                    width: 32, height: 32, background: "rgba(13,16,23,0.8)",
-                    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", color: "rgba(200,212,225,0.7)"
+                <div ref={cardRef} onClick={e => e.stopPropagation()} style={{
+                    position: "relative", width: "100%", maxWidth: 1200, height: "85vh",
+                    background: "#090A0F", border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 20, overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
                 }}>
-                    <X size={16} />
-                </button>
+                    <VectorCanvas
+                        nodes={nodes}
+                        queryVector={queryVector}
+                        selectedChunkIds={selectedChunkIds}
+                        similarityScores={similarityScores}
+                        selectedNode={selectedNode}
+                        loadingState={loadingState}
+                        onNodeSelect={onNodeSelect}
+                        isModal
+                    />
+                    <button onClick={handleClose} style={{
+                        position: "absolute", top: 16, right: 16, zIndex: 20,
+                        width: 32, height: 32, background: "rgba(13,16,23,0.8)",
+                        border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", color: "rgba(200,212,225,0.7)"
+                    }}>
+                        <X size={16} />
+                    </button>
+                </div>
             </div>
-        </div>
         </div>,
         document.body
     );

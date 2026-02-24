@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { HardDrive, FolderOpen } from "lucide-react";
+import { HardDrive, FolderOpen, Loader2 } from "lucide-react";
 import { gsap } from "gsap";
 import useCognitiveStore from "../store/useCognitiveStore";
 import IngestionModal from "./IngestionModal";
@@ -15,6 +15,7 @@ const extOf = (n) => (n ?? "").split(".").pop().toLowerCase();
 /* ═══ MEMORY FILE ROW ══════════════════════════════════════════════════ */
 function MemoryFileRow({ file, onRemove }) {
     const rowRef = useRef(null);
+    const [removing, setRemoving] = useState(false);
     const ext = extOf(file.name);
     const color = EXT_COLOR[ext] ?? "#6B7B8E";
 
@@ -31,24 +32,34 @@ function MemoryFileRow({ file, onRemove }) {
         return () => ctx.revert();
     }, []); // eslint-disable-line
 
-    /* Remove: fade + slide left + collapse height → then call parent */
-    const handleRemove = () => {
+    /* Remove: animate out → call API */
+    const handleRemove = async () => {
+        if (removing) return;
+        setRemoving(true);
         const el = rowRef.current;
-        if (!el) { onRemove(file.id); return; }
+        if (!el) { await onRemove(file.name); return; }
         const ctx = gsap.context(() => {
             gsap.timeline({
-                onComplete: () => { ctx.revert(); onRemove(file.id); },
+                onComplete: async () => {
+                    ctx.revert();
+                    await onRemove(file.name);
+                },
             })
                 .to(el, { opacity: 0, x: -10, duration: 0.18, ease: "power2.in" })
                 .to(el, { height: 0, paddingTop: 0, paddingBottom: 0, marginBottom: 0, duration: 0.17, ease: "power2.inOut" });
         });
     };
 
+    /* Format upload date */
+    const uploadTime = file.createdAt
+        ? new Date(file.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+        : null;
+
     return (
         <div
             ref={rowRef}
             style={{
-                opacity: 0,                           /* GSAP reveals */
+                opacity: 0,
                 display: "flex", alignItems: "center",
                 gap: 9, padding: "8px 10px", marginBottom: 5,
                 background: "rgba(255,255,255,0.025)",
@@ -87,6 +98,7 @@ function MemoryFileRow({ file, onRemove }) {
                     marginTop: 2, letterSpacing: "0.02em",
                 }}>
                     {file.size} · {file.chunks ?? 0} chunks
+                    {uploadTime && ` · ${uploadTime}`}
                 </div>
             </div>
 
@@ -107,24 +119,28 @@ function MemoryFileRow({ file, onRemove }) {
             {/* Remove button */}
             <button
                 onClick={handleRemove}
+                disabled={removing}
                 title="Remove from memory"
                 style={{
                     background: "none", border: "none",
-                    padding: "4px 5px", cursor: "pointer",
+                    padding: "4px 5px", cursor: removing ? "not-allowed" : "pointer",
                     color: "#2E3A48", borderRadius: 4,
                     display: "flex", alignItems: "center",
                     justifyContent: "center", flexShrink: 0,
                     transition: "color 0.16s",
                 }}
-                onMouseEnter={e => (e.currentTarget.style.color = "#C0524A")}
+                onMouseEnter={e => { if (!removing) e.currentTarget.style.color = "#C0524A"; }}
                 onMouseLeave={e => (e.currentTarget.style.color = "#2E3A48")}
                 aria-label={`Remove ${file.name}`}
             >
-                {/* ✕ */}
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
-                    stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-                    <path d="M1.5 1.5 8.5 8.5M8.5 1.5 1.5 8.5" />
-                </svg>
+                {removing ? (
+                    <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} />
+                ) : (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
+                        stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+                        <path d="M1.5 1.5 8.5 8.5M8.5 1.5 1.5 8.5" />
+                    </svg>
+                )}
             </button>
         </div>
     );
@@ -136,7 +152,8 @@ export default function MemorySidebar() {
         systemStatus,
         loadingState,
         memoryFiles,
-        processUploadedFiles,
+        removeFile,
+        uploadFiles,
     } = useCognitiveStore();
 
     const [modalOpen, setModalOpen] = useState(false);
@@ -144,19 +161,20 @@ export default function MemorySidebar() {
     /* Computed totals */
     const totalChunks = memoryFiles.reduce((acc, f) => acc + (f.chunks ?? f.pointCount ?? 0), 0);
 
-    /* ── called by IngestionModal with freshly indexed entries ── */
-    const handleAllIndexed = useCallback((entries) => {
+    /* ── called by IngestionModal with native File objects ── */
+    const handleAllIndexed = useCallback(async (entries) => {
         if (!entries?.length) return;
-        processUploadedFiles(entries);
-        setModalOpen(false);
-    }, [processUploadedFiles]);
 
-    /* ── remove ── */
-    const removeFile = useCallback((id) => {
-        // For now, we only support mock removal if we have a store action
-        // But since this is a simulation, I'll just keep it simple.
+        // entries from IngestionModal are the internal state objects, not File objects.
+        // The real upload was already triggered inside IngestionModal via uploadFiles().
+        // We just close the modal — store refresh already happened.
+        setModalOpen(false);
     }, []);
 
+    /* ── remove via API ── */
+    const handleRemove = useCallback(async (filename) => {
+        await removeFile(filename);
+    }, [removeFile]);
 
     /* Status pill */
     const pill = loadingState?.memory
@@ -195,8 +213,10 @@ export default function MemorySidebar() {
                     padding: "2px 8px", borderRadius: 4,
                     color: pill.text, background: pill.bg,
                     border: `1px solid ${pill.border}`,
+                    display: "flex", alignItems: "center", gap: 5,
                 }}>
-                    {loadingState?.memory ? "INDEXING" : (systemStatus?.vectorIndex ?? "READY")}
+                    {loadingState?.memory && <Loader2 size={8} style={{ animation: "spin 1s linear infinite" }} />}
+                    {loadingState?.memory ? "LOADING" : (systemStatus?.vectorIndex ?? "READY")}
                 </div>
             </div>
 
@@ -234,7 +254,24 @@ export default function MemorySidebar() {
                 flex: 1, minHeight: 0,
                 overflowY: "auto", overflowX: "hidden",
             }}>
-                {memoryFiles.length > 0 ? (
+                {loadingState?.memory && memoryFiles.length === 0 ? (
+                    /* Loading state */
+                    <div style={{
+                        height: "100%", display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center", justifyContent: "center",
+                        gap: 8, opacity: 0.5,
+                    }}>
+                        <Loader2 size={18} style={{ color: "#4A9BB5", animation: "spin 1s linear infinite" }} />
+                        <span style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: "10px", color: "#4E5A6A",
+                            letterSpacing: "0.08em", textTransform: "uppercase",
+                        }}>
+                            Loading files…
+                        </span>
+                    </div>
+                ) : memoryFiles.length > 0 ? (
                     <>
                         {/* Section label */}
                         <div style={{
@@ -246,9 +283,9 @@ export default function MemorySidebar() {
                         </div>
                         {memoryFiles.map(f => (
                             <MemoryFileRow
-                                key={f.id}
+                                key={f.id ?? f.name}
                                 file={f}
-                                onRemove={removeFile}
+                                onRemove={handleRemove}
                             />
                         ))}
                     </>
@@ -315,13 +352,14 @@ export default function MemorySidebar() {
                 </div>
             </div>
 
-
             {/* ── Modal ────────────────────────────────────────────────── */}
             <IngestionModal
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
                 onAllIndexed={handleAllIndexed}
             />
+
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 }
