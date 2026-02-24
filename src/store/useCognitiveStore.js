@@ -113,7 +113,7 @@ const normalizeVectorPoint = (point, index = 0) => {
     const source = point?.source || point?.file_name || point?.documentName || "unknown";
     const excerpt = point?.excerpt || point?.text_preview || point?.textPreview || "";
     const docType = point?.doc_type || point?.category || categoryForFile(source);
-    const id = String(point?.id ?? point?.chunk_id ?? `vec-${index}`);
+    const id = point?.id ? String(point.id) : `${source}-${point?.chunk_id ?? index}`;
 
     // Prefer exact doc_type match → file-category color → general fallback
     const color =

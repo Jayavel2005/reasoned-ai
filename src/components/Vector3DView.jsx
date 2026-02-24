@@ -89,7 +89,7 @@ function DataConnections({ points }) {
         <group>
             {lines.map((line, i) => (
                 <Line
-                    key={i}
+                    key={`conn-line-${i}`}
                     points={[line.start, line.end]}
                     color={line.color}
                     transparent
@@ -148,7 +148,7 @@ function Scene({ setHoveredGlobal }) {
 
             <group>
                 {points.map((pt) => (
-                    <DataPoint key={pt.id} {...pt} setHoveredGlobal={setHoveredGlobal} />
+                    <DataPoint key={`pt-${pt.id}`} {...pt} setHoveredGlobal={setHoveredGlobal} />
                 ))}
             </group>
 
@@ -194,7 +194,7 @@ export default function Vector3DView() {
             <div className="absolute bottom-3 right-3 bg-ai-bg/60 backdrop-blur-md border border-ai-border/50 px-3 py-2 rounded-lg pointer-events-none z-10 opacity-60 group-hover:opacity-100 transition-opacity">
                 <div className="space-y-1.5">
                     {clusters.map(cluster => (
-                        <div key={cluster.id} className="flex items-center gap-2 justify-end">
+                        <div key={`legend-${cluster.id}`} className="flex items-center gap-2 justify-end">
                             <span className="text-[9px] text-ai-text-secondary font-mono tracking-tight">{cluster.label}</span>
                             <div className="w-1.5 h-1.5 rounded-full shadow-[0_0_5px_currentColor]" style={{ backgroundColor: cluster.color, color: cluster.color }} />
                         </div>

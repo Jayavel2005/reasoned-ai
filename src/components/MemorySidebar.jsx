@@ -283,7 +283,7 @@ export default function MemorySidebar() {
                         </div>
                         {memoryFiles.map(f => (
                             <MemoryFileRow
-                                key={f.id ?? f.name}
+                                key={`memory-file-${f.id ?? f.name}`}
                                 file={f}
                                 onRemove={handleRemove}
                             />

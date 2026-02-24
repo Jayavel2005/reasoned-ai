@@ -336,7 +336,7 @@ function ColorLegend() {
             pointerEvents: "none",
         }}>
             {DOC_TYPE_LEGEND.map(({ label, color }) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div key={`legend-${label}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{
                         width: 8, height: 8, borderRadius: "50%",
                         background: color,
@@ -399,7 +399,7 @@ function Scene({ nodes, queryVector, selectedChunkIds, onNodeSelect, onHover, is
             {/* Document Chunks */}
             {nodes.map(n => (
                 <DataPoint
-                    key={n.id}
+                    key={`vector-${n.id}-${n.source || "mock"}`}
                     node={n}
                     isSelected={selectedChunkIds.includes(n.id)}
                     isSelectionActive={isSelectionActive}
@@ -675,7 +675,7 @@ function RetrievalHUD({ isScanning }) {
             {/* Phase dots */}
             <div style={{ display: "flex", gap: 4, paddingLeft: 4 }}>
                 {RETRIEVAL_PHASES.map((ph, i) => (
-                    <div key={i} style={{
+                    <div key={`retrieval-dot-${i}`} style={{
                         width: i === phase ? 14 : 5,
                         height: 5, borderRadius: 3,
                         background: i === phase ? ph.color : "rgba(255,255,255,0.12)",

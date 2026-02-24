@@ -89,27 +89,27 @@ function syntaxHighlight(json) {
     let match;
     while ((match = regex.exec(str)) !== null) {
         if (match.index > last) {
-            tokens.push(<span key={`w${i++}`} style={{ color: "#C8D4E0" }}>{str.slice(last, match.index)}</span>);
+            tokens.push(<span key={`json-whitespace-${i++}`} style={{ color: "#C8D4E0" }}>{str.slice(last, match.index)}</span>);
         }
         if (match[1]) {
             // string or key
             if (match[2] === ":") {
-                tokens.push(<JsonToken key={i++} type="key">{match[1]}</JsonToken>);
-                tokens.push(<JsonToken key={i++} type="punct">:</JsonToken>);
+                tokens.push(<JsonToken key={`json-key-${i++}`} type="key">{match[1]}</JsonToken>);
+                tokens.push(<JsonToken key={`json-punct-${i++}`} type="punct">:</JsonToken>);
             } else {
-                tokens.push(<JsonToken key={i++} type="string">{match[1]}</JsonToken>);
+                tokens.push(<JsonToken key={`json-string-${i++}`} type="string">{match[1]}</JsonToken>);
             }
         } else if (match[3] !== undefined) {
-            tokens.push(<JsonToken key={i++} type="boolean">{match[3]}</JsonToken>);
+            tokens.push(<JsonToken key={`json-bool-${i++}`} type="boolean">{match[3]}</JsonToken>);
         } else if (match[4] !== undefined) {
-            tokens.push(<JsonToken key={i++} type="number">{match[4]}</JsonToken>);
+            tokens.push(<JsonToken key={`json-num-${i++}`} type="number">{match[4]}</JsonToken>);
         } else if (match[5]) {
-            tokens.push(<JsonToken key={i++} type="punct">{match[5]}</JsonToken>);
+            tokens.push(<JsonToken key={`json-punct-${i++}`} type="punct">{match[5]}</JsonToken>);
         }
         last = regex.lastIndex;
     }
     if (last < str.length) {
-        tokens.push(<span key={i++} style={{ color: "#C8D4E0" }}>{str.slice(last)}</span>);
+        tokens.push(<span key={`json-tail-${i++}`} style={{ color: "#C8D4E0" }}>{str.slice(last)}</span>);
     }
     return tokens;
 }
@@ -462,8 +462,8 @@ export default function RightAnalyticsDashboard() {
                                         />
                                         <Tooltip cursor={{ fill: "rgba(189,0,255,0.07)" }} contentStyle={tooltipStyle} itemStyle={{ color: "#BD00FF" }} />
                                         <Bar dataKey="count" barSize={4} radius={[0, 3, 3, 0]}>
-                                            {faults.map((_, i) => (
-                                                <Cell key={`f-${i}`} fill="#BD00FF" fillOpacity={Math.max(0.28, 1 - i * 0.13)} />
+                                            {faults.map((entry, i) => (
+                                                <Cell key={`kpi-${entry.name}-${i}`} fill="#BD00FF" fillOpacity={Math.max(0.28, 1 - i * 0.13)} />
                                             ))}
                                         </Bar>
                                     </BarChart>

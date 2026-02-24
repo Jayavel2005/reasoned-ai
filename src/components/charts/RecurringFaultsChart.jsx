@@ -80,7 +80,7 @@ export default function RecurringFaultsChart() {
                         <Bar dataKey="count" barSize={5} radius={[0, 2, 2, 0]}>
                             {data.map((entry, i) => (
                                 <Cell
-                                    key={`cell-${entry.name}-${i}`}
+                                    key={`recurrence-${entry.name}`}
                                     fill="#BD00FF"
                                     fillOpacity={Math.max(0.35, 1 - i * 0.12)}
                                 />

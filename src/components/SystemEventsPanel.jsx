@@ -50,7 +50,7 @@ export default function SystemEventsPanel() {
                 <AnimatePresence initial={false} mode="popLayout">
                     {systemEvents.map((event) => (
                         <motion.div
-                            key={event.id}
+                            key={`event-${event.id}`}
                             layout
                             initial={{ opacity: 0, x: -20, scale: 0.95 }}
                             animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -60,8 +60,8 @@ export default function SystemEventsPanel() {
                         >
                             {/* Status Line Indicator */}
                             <div className={`absolute left-0 top-0 bottom-0 w-[2px] ${event.type === 'index' ? 'bg-[#00FFA3]' :
-                                    event.type === 'search' ? 'bg-[#00F0FF]' :
-                                        'bg-[#BD00FF]'
+                                event.type === 'search' ? 'bg-[#00F0FF]' :
+                                    'bg-[#BD00FF]'
                                 }`} />
 
                             <div className="mt-0.5 opacity-70 group-hover/item:opacity-100 transition-opacity">
@@ -75,8 +75,8 @@ export default function SystemEventsPanel() {
                                         {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                     </span>
                                     <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 border border-white/5 ${event.type === 'index' ? 'text-[#00FFA3]' :
-                                            event.type === 'search' ? 'text-[#00F0FF]' :
-                                                'text-[#BD00FF]'
+                                        event.type === 'search' ? 'text-[#00F0FF]' :
+                                            'text-[#BD00FF]'
                                         }`}>{event.type}</span>
                                 </div>
                             </div>

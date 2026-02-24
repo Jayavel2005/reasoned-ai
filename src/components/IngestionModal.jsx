@@ -435,7 +435,7 @@ function ModalContent({ onClose, onAllIndexed }) {
                         }}>
                             Ingestion Queue · {files.length} {files.length === 1 ? "file" : "files"}
                         </div>
-                        {files.map(f => <UploadRow key={f.id} file={f} />)}
+                        {files.map(f => <UploadRow key={`upload-item-${f.id}`} file={f} />)}
                     </div>
                 )}
             </div>

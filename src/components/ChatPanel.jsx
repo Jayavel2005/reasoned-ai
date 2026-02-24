@@ -165,7 +165,7 @@ function NeuralBackground({ engineState }) {
             {/* Nodes */}
             {NODES.map((n, i) => (
                 <circle
-                    key={n.id}
+                    key={`bg-node-${n.id}`}
                     ref={el => (nodeRefs.current[i] = el)}
                     cx={`${n.cx}%`}
                     cy={`${n.cy}%`}
@@ -315,7 +315,7 @@ function TypingIndicator() {
             <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                 {[0, 1, 2].map(i => (
                     <span
-                        key={i}
+                        key={`typing-dot-${i}`}
                         ref={el => (dots.current[i] = el)}
                         style={{
                             width: 4, height: 4, borderRadius: "50%",
@@ -424,12 +424,12 @@ function MarkdownRenderer({ text }) {
         }}>
             {blocks.map((block, bi) => {
                 if (block.type === "reasoning") {
-                    return <ReasoningBlock key={bi} content={block.content} />;
+                    return <ReasoningBlock key={`block-reasoning-${bi}`} content={block.content} />;
                 }
 
                 return (
                     <ReactMarkdown
-                        key={bi}
+                        key={`block-md-${bi}`}
                         remarkPlugins={[remarkGfm]}
                         components={{
                             p: ({ children }) => <p style={{ margin: "0 0 12px", color: "#D4DDE8" }}>{children}</p>,
@@ -841,7 +841,7 @@ function EmptyState() {
                 <circle cx="20" cy="20" r="19" stroke="rgba(74,155,181,0.2)" strokeWidth="0.8" />
                 <circle cx="20" cy="20" r="2.4" fill="rgba(74,155,181,0.5)" />
                 {[[12, 12], [28, 12], [20, 8], [12, 28], [28, 28], [20, 32]].map(([x, y], i) => (
-                    <g key={i}>
+                    <g key={`logo-point-${i}`}>
                         <circle cx={x} cy={y} r="1.6" fill="rgba(74,155,181,0.25)" />
                         <line x1="20" y1="20" x2={x} y2={y}
                             stroke="rgba(74,155,181,0.12)" strokeWidth="0.6" />
@@ -1032,7 +1032,7 @@ function SuggestionsBlock({ onSelect }) {
             {/* Groups */}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {SUGGESTION_GROUPS.map(group => (
-                    <div key={group.label}>
+                    <div key={`suggest-group-${group.label}`}>
                         {/* Group label */}
                         <div style={{
                             fontFamily: "'IBM Plex Mono', monospace",
@@ -1048,7 +1048,7 @@ function SuggestionsBlock({ onSelect }) {
                                 const idx = chipIdx++;
                                 return (
                                     <button
-                                        key={text}
+                                        key={`suggest-item-${text}`}
                                         ref={el => (chipRefs.current[idx] = el)}
                                         onClick={() => onSelect(text)}
                                         style={{
@@ -1293,7 +1293,7 @@ function FollowUpBlock({ questions, onSelect }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 7, maxWidth: 680 }}>
                 {questions.map((q, idx) => (
                     <button
-                        key={q}
+                        key={`followup-${idx}`}
                         ref={el => (chipRefs.current[idx] = el)}
                         onClick={() => onSelect(q)}
                         style={{
@@ -1535,8 +1535,8 @@ export default function ChatPanel() {
                     ? <EmptyState />
                     : messages.map(msg =>
                         msg.sender === "system"
-                            ? <SystemSummaryBubble key={msg.id} message={msg} />
-                            : <MessageBubble key={msg.id} message={msg} />
+                            ? <SystemSummaryBubble key={`msg-system-${msg.id}`} message={msg} />
+                            : <MessageBubble key={`msg-user-${msg.id}`} message={msg} />
                     )
                 }
 

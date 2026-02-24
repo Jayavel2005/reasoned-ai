@@ -612,7 +612,7 @@ export default function FileIngestion({
                         Ingestion Queue
                     </div>
                     {files.map(f => (
-                        <FileRow key={f.id} file={f} onRemove={removeFile} />
+                        <FileRow key={`upload-row-${f.id}`} file={f} onRemove={removeFile} />
                     ))}
                 </div>
             )}
@@ -632,7 +632,7 @@ export default function FileIngestion({
                         Active Vectors
                     </div>
                     {safeStoreFiles.map(f => (
-                        <StoreFileRow key={f.id ?? f.name} file={f} />
+                        <StoreFileRow key={`active-vector-${f.id ?? f.name}`} file={f} />
                     ))}
                 </div>
             )}
