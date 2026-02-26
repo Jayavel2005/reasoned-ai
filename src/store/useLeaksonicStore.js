@@ -182,6 +182,7 @@ const useLeaksonicStore = create((set, get) => ({
 
             // Map 512 bins -> 128 bins (for telemetry UI)
             const newFftSpectrumData = Array(128).fill(0);
+            const prevFft = state.fftSpectrumData;
             for (let i = 0; i < 128; i++) {
                 let sum = 0;
                 for (let j = 0; j < 4; j++) {
@@ -189,7 +190,11 @@ const useLeaksonicStore = create((set, get) => ({
                     const v = realFftMagnitudes[i * 4 + j];
                     sum += isNaN(v) ? 0 : v;
                 }
-                newFftSpectrumData[i] = (sum / 4.0) * 1.5;
+                const targetVal = (sum / 4.0) * 1.5;
+
+                // Exponential moving average for liquid-smooth spectrum visualization
+                const prevVal = prevFft && prevFft[i] !== undefined ? prevFft[i] : 0;
+                newFftSpectrumData[i] = prevVal + (targetVal - prevVal) * 0.2;
             }
 
             // 5. UPDATE SENSOR NODES

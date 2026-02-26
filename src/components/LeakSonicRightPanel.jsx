@@ -44,9 +44,6 @@ function FFTBarChart({ data, color }) {
 
     const maxVal = Math.max(20, ...data);
 
-    // Debug for telemetry stream
-    if (Math.random() < 0.05) console.log("FFT Telemetry -> maxVal:", maxVal, "sample[50]:", data[50]);
-
     return (
         <div className="w-full h-24 flex items-end gap-[1px] bg-[rgba(255,255,255,0.01)] border border-[rgba(255,255,255,0.05)] rounded-lg p-2">
             {data.map((val, i) => {
@@ -55,7 +52,7 @@ function FFTBarChart({ data, color }) {
                 return (
                     <div
                         key={i}
-                        className="flex-1 rounded-t-sm transition-all duration-75"
+                        className="flex-1 rounded-t-sm"
                         style={{
                             height: `${heightPct}%`,
                             backgroundColor: color,
