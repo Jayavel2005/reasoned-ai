@@ -3,6 +3,7 @@ import ConnectionStatusToast from "./components/ConnectionStatusToast";
 import MemorySidebar from "./components/MemorySidebar";
 import ChatPanel from "./components/ChatPanel";
 import RightAnalyticsDashboard from "./components/RightAnalyticsDashboard";
+import LeakSonicLayout from "./components/LeakSonicLayout";
 import useCognitiveStore from "./store/useCognitiveStore";
 import { useEffect } from "react";
 
@@ -39,7 +40,7 @@ function ErrorBanner() {
 }
 
 export default function App() {
-    const { loadMemoryFiles, loadVectors, loadAnalytics } = useCognitiveStore();
+    const { loadMemoryFiles, loadVectors, loadAnalytics, activeMode } = useCognitiveStore();
 
     useEffect(() => {
         loadMemoryFiles();
@@ -51,17 +52,40 @@ export default function App() {
         <div className="h-screen flex flex-col w-full bg-[#090A0F] text-white font-sans antialiased selection:bg-[#BD00FF] selection:text-white overflow-hidden">
             <Navbar />
 
-            <div className="flex flex-1 overflow-hidden p-4 gap-4 min-h-0">
-                <div className="w-[20%] h-full overflow-hidden glass-panel rounded-2xl p-4">
-                    <MemorySidebar />
+            <div className="flex-1 relative overflow-hidden min-h-0">
+                {/* ReasonedAI Mode */}
+                <div
+                    className="absolute inset-0 flex p-4 gap-4 transition-opacity duration-1000 ease-in-out"
+                    style={{
+                        opacity: activeMode === "ReasonedAI" || !activeMode ? 1 : 0,
+                        pointerEvents: activeMode === "ReasonedAI" || !activeMode ? "auto" : "none",
+                        zIndex: activeMode === "ReasonedAI" || !activeMode ? 10 : 1
+                    }}
+                >
+                    <div className="w-[20%] h-full overflow-hidden glass-panel rounded-2xl p-4">
+                        <MemorySidebar />
+                    </div>
+
+                    <div className="w-[45%] h-full overflow-hidden glass-panel rounded-2xl">
+                        <ChatPanel />
+                    </div>
+
+                    <div className="w-[35%] h-full overflow-hidden flex flex-col min-h-0">
+                        <RightAnalyticsDashboard />
+                    </div>
                 </div>
 
-                <div className="w-[45%] h-full overflow-hidden glass-panel rounded-2xl">
-                    <ChatPanel />
-                </div>
-
-                <div className="w-[35%] h-full overflow-hidden flex flex-col min-h-0">
-                    <RightAnalyticsDashboard />
+                {/* LeakSonic Mode */}
+                <div
+                    className="absolute inset-0 transition-opacity duration-1000 ease-in-out"
+                    style={{
+                        opacity: activeMode === "LeakSonic" ? 1 : 0,
+                        pointerEvents: activeMode === "LeakSonic" ? "auto" : "none",
+                        zIndex: activeMode === "LeakSonic" ? 10 : 1
+                    }}
+                >
+                    {/* Render always but visually hide it to keep ThreeJs context intact, or mount it conditionally */}
+                    <LeakSonicLayout />
                 </div>
             </div>
 

@@ -174,6 +174,7 @@ const useCognitiveStore = create((set, get) => ({
     similarityScores: {},
 
     // UI state
+    activeMode: "ReasonedAI", // "ReasonedAI" | "LeakSonic"
     hoveredChunk: null,
     selectedNode: null,
     isFullscreenVector: false,
@@ -193,6 +194,7 @@ const useCognitiveStore = create((set, get) => ({
     clearToast: () => set({ toast: null }),
 
     // ── UI toggles ─────────────────────────────────────────────
+    setActiveMode: (mode) => set({ activeMode: mode }),
     setHoveredChunk: (chunk) => set({ hoveredChunk: chunk || null }),
     setSelectedNode: (node) => set({ selectedNode: node || null }),
     toggleFullscreenVector: () => set((state) => ({ isFullscreenVector: !state.isFullscreenVector })),

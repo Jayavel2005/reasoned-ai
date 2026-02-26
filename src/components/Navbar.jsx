@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
+import useCognitiveStore from "../store/useCognitiveStore";
 
 /* ─────────────────────────────────────────────────────────────────────
    Cognitive Core SVG
@@ -121,32 +122,91 @@ function StatusItem({ dot = "neutral", label }) {
     );
 }
 
+function NavTab({ active, title, subtitle, onClick, dataAnim }) {
+    return (
+        <button
+            onClick={onClick}
+            data-anim={dataAnim}
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px 8px",
+                position: "relative",
+                textAlign: "left",
+                outline: "none"
+            }}
+        >
+            <span
+                style={{
+                    fontFamily: "'Inter', system-ui, sans-serif",
+                    fontSize: "16px",
+                    fontWeight: 500,
+                    letterSpacing: "-0.01em",
+                    color: active ? "#00F0FF" : "#DDE4EE",
+                    textShadow: active ? "0 0 10px rgba(0, 240, 255, 0.4)" : "none",
+                    lineHeight: 1,
+                    transition: "color 0.3s ease, text-shadow 0.3s ease",
+                }}
+            >
+                {title}
+            </span>
+            <span
+                style={{
+                    fontFamily: "'Inter', system-ui, sans-serif",
+                    fontSize: "11px",
+                    fontWeight: 400,
+                    letterSpacing: "0.04em",
+                    color: active ? "rgba(0, 240, 255, 0.7)" : "rgba(180,192,210,0.55)",
+                    lineHeight: 1,
+                    transition: "color 0.3s ease",
+                }}
+            >
+                {subtitle}
+            </span>
+            {/* Animated underline */}
+            <div style={{
+                position: "absolute",
+                bottom: -8,
+                left: 0,
+                height: 2,
+                width: active ? "100%" : "0%",
+                background: "#00F0FF",
+                boxShadow: "0 0 8px rgba(0, 240, 255, 0.6)",
+                transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            }} />
+        </button>
+    );
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    Navbar
 ───────────────────────────────────────────────────────────────────── */
 export default function Navbar({ className = "shrink-0" }) {
     const brandRef = useRef(null);
     const statusRef = useRef(null);
+    const { activeMode, setActiveMode } = useCognitiveStore();
 
     /* ── Entry animation — three beats, no loop ── */
     useEffect(() => {
         const icon = brandRef.current?.querySelector("[data-anim='icon']");
-        const title = brandRef.current?.querySelector("[data-anim='title']");
-        const subtitle = brandRef.current?.querySelector("[data-anim='subtitle']");
+        const title1 = brandRef.current?.querySelector("[data-anim='tab1']");
+        const title2 = brandRef.current?.querySelector("[data-anim='tab2']");
         const badge = statusRef.current;
 
         // Hard-set initial states (avoids flash before JS runs)
-        gsap.set([icon, title, subtitle, badge], { opacity: 0 });
+        gsap.set([icon, title1, title2, badge], { opacity: 0 });
         gsap.set(icon, { y: 7 });
-        gsap.set(title, { y: 4 });
+        gsap.set([title1, title2], { y: 4 });
 
         gsap.timeline({ defaults: { ease: "power2.out" } })
             // 1. Icon rises in
             .to(icon, { opacity: 1, y: 0, duration: 0.55 }, 0)
-            // 2. Title fades in 100ms later
-            .to(title, { opacity: 1, y: 0, duration: 0.45 }, 0.1)
-            // 3. Subtitle follows
-            .to(subtitle, { opacity: 1, duration: 0.4 }, 0.2)
+            // 2. Titles fade in 100ms later
+            .to([title1, title2], { opacity: 1, y: 0, duration: 0.45, stagger: 0.1 }, 0.1)
             // 4. Status rail fades in last
             .to(badge, { opacity: 1, duration: 0.45 }, 0.35);
     }, []);
@@ -180,7 +240,7 @@ export default function Navbar({ className = "shrink-0" }) {
                 style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 12,                  /* 1.5× grid unit */
+                    gap: 16,
                     flexShrink: 0,
                 }}
             >
@@ -197,38 +257,25 @@ export default function Navbar({ className = "shrink-0" }) {
                         height: 32,
                         background: "rgba(255,255,255,0.08)",
                         flexShrink: 0,
+                        marginRight: 8,
                     }}
                 />
 
-                {/* Wordmark stack */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span
-                        data-anim="title"
-                        style={{
-                            fontFamily: "'Inter', system-ui, sans-serif",
-                            fontSize: "16px",
-                            fontWeight: 500,
-                            letterSpacing: "-0.01em",
-                            color: "#DDE4EE",
-                            lineHeight: 1,
-                        }}
-                    >
-                        ReasonedAI
-                    </span>
-                    <span
-                        data-anim="subtitle"
-                        style={{
-                            fontFamily: "'Inter', system-ui, sans-serif",
-                            fontSize: "11px",
-                            fontWeight: 400,
-                            letterSpacing: "0.04em",
-                            color: "rgba(180,192,210,0.55)",
-                            lineHeight: 1,
-                        }}
-                    >
-                        Agentic Transformation Engine
-                    </span>
-                </div>
+                <NavTab
+                    active={activeMode === "ReasonedAI"}
+                    title="ReasonedAI"
+                    subtitle="Agentic Engine"
+                    onClick={() => setActiveMode("ReasonedAI")}
+                    dataAnim="tab1"
+                />
+
+                <NavTab
+                    active={activeMode === "LeakSonic"}
+                    title="LeakSonic"
+                    subtitle="Physical Digital Twin"
+                    onClick={() => setActiveMode("LeakSonic")}
+                    dataAnim="tab2"
+                />
             </div>
 
             {/* ══════════════════════════════════
@@ -254,7 +301,7 @@ export default function Navbar({ className = "shrink-0" }) {
             >
                 <StatusItem dot="green" label="Stable" />
                 <VDivider />
-                <StatusItem dot="cyan" label="Confidence Engine Active" />
+                <StatusItem dot="cyan" label={activeMode === "LeakSonic" ? "Sensor Network Active" : "Confidence Engine Active"} />
                 <VDivider />
                 <StatusItem dot="green" label="Governance Validated" />
             </div>
