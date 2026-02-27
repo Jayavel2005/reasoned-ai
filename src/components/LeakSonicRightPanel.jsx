@@ -67,7 +67,7 @@ function FFTBarChart({ data, color }) {
 }
 
 export default function LeakSonicRightPanel() {
-    const { pressureHistory, waveformHistory, fftSpectrumData, systemConfidence, leakState, telemetryCollapsed, setTelemetryCollapsed } = useLeaksonicStore();
+    const { pressureHistory, waveformHistory, fftSpectrumData, systemConfidence, leakState, leakActive, telemetryCollapsed, setTelemetryCollapsed } = useLeaksonicStore();
 
     if (telemetryCollapsed) {
         return (
@@ -135,6 +135,17 @@ export default function LeakSonicRightPanel() {
                         <div className="flex items-baseline gap-1 z-10">
                             <span className="text-[12px] text-[#FF4D6D] font-mono tracking-tight mt-1 truncate">{leakState}</span>
                         </div>
+                    </div>
+                </div>
+
+                {/* Leak Status Indicator */}
+                <div className={`flex flex-col p-2 rounded-lg border relative overflow-hidden transition-colors ${leakActive ? 'border-[rgba(255,77,109,0.3)] bg-[rgba(255,77,109,0.05)]' : 'border-[rgba(6,214,160,0.3)] bg-[rgba(6,214,160,0.05)]'}`}>
+                    <span className="text-[#7A8899] font-mono text-[9px] uppercase tracking-wider mb-0.5 z-10">Leak Status</span>
+                    <div className="flex items-center gap-2 z-10 mt-1">
+                        <div className={`w-2 h-2 rounded-full ${leakActive ? 'bg-[#FF4D6D] animate-ping shadow-[0_0_8px_#FF4D6D]' : 'bg-[#06D6A0] shadow-[0_0_8px_#06D6A0]'}`} />
+                        <span className={`text-[12px] font-mono tracking-tight font-bold ${leakActive ? 'text-[#FF4D6D]' : 'text-[#06D6A0]'}`}>
+                            {leakActive ? 'ACTIVE' : 'INACTIVE'}
+                        </span>
                     </div>
                 </div>
 

@@ -33,9 +33,12 @@ const useLeaksonicStore = create((set, get) => ({
     setInletValveState: (state) => set({ inletValveState: state }),
     setMiddleValveState: (state) => set({ middleValveState: state }),
     setOutletValveState: (state) => set({ outletValveState: state }),
+    leakEnabled: false,
+    leakActive: false,
+    toggleLeak: () => set(state => ({ leakEnabled: !state.leakEnabled })),
 
     // Compressor State
-    compressorActive: false,
+    compressorActive: true,
     compressorTargetPressure: 100, // GUI target
     compressorPressure: 0,         // Physical output
     currentSystemPressure: 0,      // Avg modeled pressure
@@ -82,33 +85,35 @@ const useLeaksonicStore = create((set, get) => ({
             const state = get();
             let currentLeak = state.leakEvent;
 
-            // Random leak injection if system is pressurized and running
-            if (state.compressorActive && state.currentSystemPressure > 50 && !currentLeak && Math.random() < 0.005) {
+            // Auto disable leak when pressure drops
+            const MIN_PRESSURE = 5;
+            let currentLeakEnabled = state.leakEnabled;
+            if (state.compressorPressure <= MIN_PRESSURE && currentLeakEnabled) {
+                currentLeakEnabled = false;
+            }
+
+            const currentLeakActive = currentLeakEnabled && state.compressorPressure > MIN_PRESSURE;
+
+            if (currentLeakActive && !currentLeak) {
                 currentLeak = {
-                    segment: "SEG_MAIN_HORIZ",
-                    position: [7, 12, 0.5], // Downstream of valve
+                    segment: "SEG_VENT_BRANCH",
+                    position: [0, 15, 0],
                     intensity: 0.1,
                     startTime: Date.now(),
-                    growthRate: 15 // PSI/s equivalent energy
+                    growthRate: 15
                 };
+            } else if (!currentLeakActive && currentLeak) {
+                currentLeak = null;
             }
 
             // Evolve leak
             let leakLoss = 0;
-            let leakActive = false;
             let currentLeakLoc = null;
-            if (currentLeak) {
+            if (currentLeak && currentLeakActive) {
                 const elapsedS = (Date.now() - currentLeak.startTime) / 1000;
                 currentLeak.intensity = Math.min(100, 0.1 + elapsedS * currentLeak.growthRate);
-                leakLoss = Math.min(20, currentLeak.intensity * 0.2); // max 20 PSI drop
-                leakActive = true;
+                leakLoss = Math.min(20, currentLeak.intensity * 0.2);
                 currentLeakLoc = currentLeak.position;
-
-                if (elapsedS > 20) {
-                    currentLeak = null; // Auto fix after 20s for demo
-                    leakActive = false;
-                    currentLeakLoc = null;
-                }
             }
 
             // 1. COMPUTE PRESSURE DISTRIBUTION
@@ -123,7 +128,7 @@ const useLeaksonicStore = create((set, get) => ({
             let p2 = p1 * state.middleValveState;
             p2 += p2 * (1.0 - state.outletValveState) * 0.2;
 
-            if (leakActive && p2 > 10) {
+            if (currentLeakActive && p2 > 10) {
                 p2 = Math.max(0, p2 - leakLoss);
             }
 
@@ -146,7 +151,7 @@ const useLeaksonicStore = create((set, get) => ({
 
             const baseCarrierFreq = 32000;
             const leakFreq = 38000;
-            const isLeakActive = leakActive && newSystemPressure > 20;
+            const isLeakActive = currentLeakActive;
 
             let maxAmp = 0;
             let rmsSum = 0;
@@ -251,6 +256,8 @@ const useLeaksonicStore = create((set, get) => ({
                 leakEvent: currentLeak,
                 leakState: leakStateStr,
                 leakLocation: currentLeakLoc,
+                leakEnabled: currentLeakEnabled,
+                leakActive: currentLeakActive,
                 nodes: updatedNodes,
                 ultrasonicSignalBuffer: signalBuffer,
                 fftSpectrumData: newFftSpectrumData,
@@ -270,7 +277,7 @@ const useLeaksonicStore = create((set, get) => ({
         set({ simulationActive: false });
     },
 
-    resolveLeak: () => set({ leakEvent: null, leakState: "NORMAL", leakLocation: null })
+    resolveLeak: () => set({ leakEvent: null, leakState: "NORMAL", leakLocation: null, leakEnabled: false })
 }));
 
 export default useLeaksonicStore;

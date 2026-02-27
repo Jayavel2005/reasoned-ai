@@ -12,7 +12,9 @@ function CompressorControlPanel() {
         middleValveState,
         setMiddleValveState,
         outletValveState,
-        setOutletValveState
+        setOutletValveState,
+        leakEnabled,
+        toggleLeak
     } = useLeaksonicStore();
 
     return (
@@ -46,6 +48,16 @@ function CompressorControlPanel() {
                     }`}
             >
                 {compressorActive ? 'SHUTDOWN MOTOR' : 'START MOTOR'}
+            </button>
+
+            <button
+                onClick={() => toggleLeak()}
+                className={`w-full py-2 mt-2 font-mono text-[10px] tracking-widest uppercase rounded border transition-all ${leakEnabled
+                    ? 'bg-[rgba(255,77,109,0.1)] text-[#FF4D6D] border-[#FF4D6D]/40 hover:bg-[rgba(255,77,109,0.2)] hover:shadow-[0_0_10px_rgba(255,77,109,0.2)]'
+                    : 'bg-[rgba(255,214,10,0.1)] text-[#FFD60A] border-[#FFD60A]/40 hover:bg-[rgba(255,214,10,0.2)] hover:shadow-[0_0_10px_rgba(255,214,10,0.2)]'
+                    }`}
+            >
+                {leakEnabled ? 'STOP LEAK' : 'INTRODUCE LEAK'}
             </button>
 
             {/* Valve Controls */}

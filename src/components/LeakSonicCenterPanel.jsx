@@ -162,11 +162,23 @@ function AirflowParticles({ curve, leakEvent, currentSystemPressure, compressorA
             if (leakEvent) {
                 const leakPos = new THREE.Vector3(...leakEvent.position);
                 const distToLeak = pos.distanceTo(leakPos);
-                if (distToLeak < 4) {
-                    // Gravity-like pull towards the leak
-                    const pullStrength = Math.max(0, 1 - (distToLeak / 4));
-                    const force = leakPos.clone().sub(pos).multiplyScalar(pullStrength * 0.4 * (leakEvent.intensity / 100));
-                    pos.add(force);
+                if (distToLeak < 8 && leakEvent.position[1] > 14) { // Specific to middle valve leak for branch
+                    const pullStrength = Math.max(0, 1 - (distToLeak / 8));
+
+                    // Route flow inside pipes instead of cutting diagonally across empty space
+                    if (pos.x < -0.4 && pos.y <= 12.5) {
+                        // Accelerate rightwards along main pipe horizontally
+                        pos.x += pullStrength * 0.8 * (leakEvent.intensity / 100);
+                        pos.y = Math.max(11.6, Math.min(12.4, pos.y));
+                    } else if (pos.x >= -0.4 && pos.x <= 0.4 && pos.y <= 15) {
+                        // Caught in junction! Pull upwards into branch vertically 
+                        pos.y += pullStrength * 1.5 * (leakEvent.intensity / 100);
+                        pos.x = Math.max(-0.4, Math.min(0.4, pos.x)); // clamp inside vertical branch radial
+                        if (pos.y > 14.8) p.scale = 0; // Destroy particle as it 'escapes' the valve boundary
+                    } else if (pos.x > 0.4 && pos.x < 4 && pos.y <= 12.5) {
+                        // Backwards vacuum pull for particles just past the junction
+                        pos.x -= pullStrength * 0.4 * (leakEvent.intensity / 100);
+                    }
 
                     colorObj.lerpColors(targetColor, leakColor, pullStrength);
                 } else {
@@ -222,19 +234,18 @@ function LeakJetParticles({ leakEvent }) {
             p.life += delta * (p.speed * 0.1);
             if (p.life > 1) p.life -= 1;
 
-            // Jet shoots straight UP and fans out slightly from the leak position
-            // Main horizontal pipe has surface normal facing UP or OUT. Assuming top pipe, let's shoot UP.
-
-            const y = p.life * 4.0; // Shoot up 4 units
+            // Jet shoots outward from the vertical branch valve surface
+            // The segment is vertical, and the valve body protrudes horizontally
+            const z = p.life * 4.0; // Shoot out 4 units
             const spread = p.life * 1.2; // Fan out
 
             const xOffset = Math.cos(p.angle) * p.radius + Math.cos(p.angle) * spread;
-            const zOffset = Math.sin(p.angle) * p.radius + Math.sin(p.angle) * spread;
+            const yOffset = Math.sin(p.angle) * p.radius + Math.sin(p.angle) * spread;
 
             dummy.position.set(
                 leakEvent.position[0] + xOffset,
-                leakEvent.position[1] + 0.5 + y, // Start on pipe surface (radius 0.5)
-                leakEvent.position[2] + zOffset
+                leakEvent.position[1] + yOffset,
+                leakEvent.position[2] + 0.5 + z // Start on pipe surface (radius 0.5)
             );
 
             const scale = (1.0 - p.life) * (leakEvent.intensity / 50 + 0.5);
