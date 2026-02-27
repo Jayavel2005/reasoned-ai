@@ -36,6 +36,7 @@ export const fetchEspTelemetry = async () => {
             lastUpdate: Date.now()
         };
     } catch (error) {
-        return null; // Return null so hook can freeze last known values
+        console.error("ESP32 Telemetry Fetch Error:", error);
+        return null;
     }
 };

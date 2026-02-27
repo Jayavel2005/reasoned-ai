@@ -1,5 +1,4 @@
 import useLeaksonicStore from "../store/useLeaksonicStore";
-import { useEspTelemetry } from "../hooks/useEspTelemetry";
 
 function SimpleSVGLineChart({ data, min, max, color, fill }) {
     if (!data || data.length === 0) return null;
@@ -68,15 +67,7 @@ function FFTBarChart({ data, color }) {
 }
 
 export default function LeakSonicRightPanel() {
-    const { telemetryCollapsed, setTelemetryCollapsed } = useLeaksonicStore();
-    const { telemetry, connected, pressureHistory, waveformHistory, fftSpectrumData } = useEspTelemetry();
-
-    let leakState = 'SYSTEM OPTIMAL';
-    if (!connected) leakState = 'OFFLINE';
-    else if (telemetry.leakDetected) leakState = 'CRITICAL';
-
-    const leakActive = connected && telemetry.leakDetected;
-    const systemConfidence = connected ? (telemetry.leakDetected ? 0.99 : 0.95) : 0;
+    const { pressureHistory, waveformHistory, fftSpectrumData, systemConfidence, leakState, leakActive, telemetryCollapsed, setTelemetryCollapsed } = useLeaksonicStore();
 
     if (telemetryCollapsed) {
         return (

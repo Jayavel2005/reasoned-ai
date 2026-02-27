@@ -3,7 +3,6 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Sparkles, Html, Float } from "@react-three/drei";
 import * as THREE from "three";
 import useLeaksonicStore from "../store/useLeaksonicStore";
-import { useEspTelemetry } from "../hooks/useEspTelemetry";
 
 // Glass-like transparent material for pipes
 function PipeMaterial({ pressure }) {
@@ -521,49 +520,7 @@ function PressureSensor({ node }) {
 }
 
 function PhysicalTwinScene() {
-    const { pipeGeometry, compressorActive, inletValveState, middleValveState, outletValveState } = useLeaksonicStore();
-    const { telemetry, connected } = useEspTelemetry();
-
-    const currentSystemPressure = connected ? telemetry.systemPressurePsi : 0;
-    const flowVelocity = currentSystemPressure > 5 ? currentSystemPressure / 100 : 0;
-
-    const leakEvent = (connected && telemetry.leakDetected) ? {
-        position: [0, 15, 0], // Middle valve on top vertical branch
-        intensity: Math.max(0.1, telemetry.leakVoltage * 20), // Scale intensity for visual logic
-        segment: "SEG_VENT_BRANCH",
-        growthRate: telemetry.leakVoltage * 2
-    } : null;
-
-    const usNode = {
-        id: "US-01",
-        type: "ULTRASONIC",
-        segment: "SEG_MAIN_HORIZ",
-        position: [-5, 12, 0.4],
-        status: (connected && telemetry.leakDetected) ? "WARNING" : (connected ? "ONLINE" : "OFFLINE"),
-        rawAmplitude: connected ? telemetry.leakVoltage * 50 : 0, // rough scale
-        confidence: (connected && telemetry.leakDetected) ? 0.95 : (connected ? 0.05 : 0),
-        featureVector: connected ? {
-            peakFrequency: telemetry.leakDetected ? 38000 : 32000,
-            signalToNoiseRatio: telemetry.leakVoltage * 10
-        } : null
-    };
-
-    const pressNodes = [
-        {
-            id: "PR-01",
-            type: "PRESSURE",
-            segment: "SEG_LEFT_VERT",
-            position: [-14, 6, 0.4],
-            pressurePSI: connected ? telemetry.inletPressurePsi : 0
-        },
-        {
-            id: "PR-02",
-            type: "PRESSURE",
-            segment: "SEG_RIGHT_VERT",
-            position: [14, 6, 0.4],
-            pressurePSI: connected ? telemetry.outletPressurePsi : 0
-        }
-    ];
+    const { pipeGeometry, nodes, leakEvent, leakState, currentSystemPressure, compressorActive, inletValveState, middleValveState, outletValveState, flowVelocity } = useLeaksonicStore();
 
     // The open directed topology from source to sink
     const curvePoints = useMemo(() => [
@@ -583,6 +540,9 @@ function PhysicalTwinScene() {
         }
         return path;
     }, [curvePoints]);
+
+    const usNodes = nodes.filter(n => n.type === "ULTRASONIC");
+    const pressNodes = nodes.filter(n => n.type === "PRESSURE");
 
     return (
         <>
@@ -624,22 +584,14 @@ function PhysicalTwinScene() {
                 {/* Outlet Valve - Downstream nearest to exit */}
                 <IndustrialValve position={[18, 2, 0]} rotation={[0, 0, Math.PI / 2]} valveState={outletValveState} />
 
-                {pipeGeometry.map((seg) => {
-                    let segPressure = currentSystemPressure;
-                    if (seg.id === 'SEG_LEFT_VERT' || seg.id === 'SEG_COMP_CONN') {
-                        segPressure = connected ? telemetry.inletPressurePsi : 0;
-                    } else if (seg.id === 'SEG_RIGHT_VERT' || seg.id === 'SEG_OUTLET') {
-                        segPressure = connected ? telemetry.outletPressurePsi : 0;
-                    }
-                    return (
-                        <PhysicalPipeSegment
-                            key={seg.id}
-                            segment={seg}
-                            leakEvent={leakEvent}
-                            currentSystemPressure={segPressure}
-                        />
-                    );
-                })}
+                {pipeGeometry.map((seg) => (
+                    <PhysicalPipeSegment
+                        key={seg.id}
+                        segment={seg}
+                        leakEvent={leakEvent}
+                        currentSystemPressure={currentSystemPressure}
+                    />
+                ))}
 
                 {curvePoints.map((pos, i) => {
                     // Filter out the junction from generic corners rendering if needed, 
@@ -660,7 +612,9 @@ function PhysicalTwinScene() {
 
                 <LeakJetParticles leakEvent={leakEvent} />
 
-                <UltrasonicSensor key={usNode.id} node={usNode} leakState={(connected && telemetry.leakDetected) ? "WARNING" : "NORMAL"} leakEvent={leakEvent} />
+                {usNodes.map(node => (
+                    <UltrasonicSensor key={node.id} node={node} leakState={leakState} leakEvent={leakEvent} />
+                ))}
 
                 {pressNodes.map(node => (
                     <PressureSensor key={node.id} node={node} />
@@ -672,19 +626,7 @@ function PhysicalTwinScene() {
 
 
 export default function LeakSonicCenterPanel() {
-    const { telemetry, connected } = useEspTelemetry();
-
-    let leakState = 'SYSTEM OPTIMAL';
-    if (!connected) leakState = 'OFFLINE';
-    else if (telemetry.leakDetected) leakState = 'CRITICAL';
-
-    const systemConfidence = connected ? (telemetry.leakDetected ? 0.99 : 0.95) : 0;
-    const leakEvent = (connected && telemetry.leakDetected) ? {
-        segment: "SEG_VENT_BRANCH",
-        growthRate: telemetry.leakVoltage * 2,
-        intensity: Math.max(0.1, telemetry.leakVoltage * 20),
-        position: [0, 15, 0]
-    } : null;
+    const { leakState, systemConfidence, leakEvent } = useLeaksonicStore();
 
     return (
         <div className="flex flex-col h-full w-full relative">
@@ -703,9 +645,9 @@ export default function LeakSonicCenterPanel() {
                         leakState === 'DETECTED' ? 'bg-[rgba(255,214,10,0.2)] border-[#FFD60A]/40' :
                             'bg-[rgba(14,16,23,0.6)] border-[rgba(255,255,255,0.05)]'}`}
                 >
-                    <div className={`w-2 h-2 rounded-full ${leakState === 'CRITICAL' ? 'bg-[#FF4D6D] animate-ping' : leakState === 'DETECTED' ? 'bg-[#FFD60A]' : leakState === 'OFFLINE' ? 'bg-[#7A8899]' : 'bg-[#06D6A0]'}`} />
+                    <div className={`w-2 h-2 rounded-full ${leakState === 'CRITICAL' ? 'bg-[#FF4D6D] animate-ping' : leakState === 'DETECTED' ? 'bg-[#FFD60A]' : 'bg-[#06D6A0]'}`} />
                     <span className="font-mono text-xs tracking-wider text-[#DDE4EE]">
-                        {leakState === 'CRITICAL' ? 'LEAK CRITICAL' : leakState === 'DETECTED' ? 'ANOMALY DETECTED' : leakState === 'OFFLINE' ? 'SENSOR OFFLINE' : 'SYSTEM OPTIMAL'}
+                        {leakState === 'CRITICAL' ? 'LEAK CRITICAL' : leakState === 'DETECTED' ? 'ANOMALY DETECTED' : 'SYSTEM OPTIMAL'}
                     </span>
                 </div>
 
@@ -745,10 +687,10 @@ export default function LeakSonicCenterPanel() {
                     <span className="text-[#00F0FF] font-mono text-sm">{(systemConfidence * 100).toFixed(1)}%</span>
                 </div>
                 <div className="flex flex-col">
-                    <span className="text-[#7A8899] font-mono text-[10px] uppercase">Telemetry</span>
+                    <span className="text-[#7A8899] font-mono text-[10px] uppercase">Simulation</span>
                     <div className="flex items-center gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${connected ? 'bg-[#06D6A0]' : 'bg-[#FF4D6D]'}`} />
-                        <span className={`font-mono text-sm ${connected ? 'text-[#06D6A0]' : 'text-[#FF4D6D]'}`}>{connected ? 'LIVE // ESP32 STREAM' : 'OFFLINE // ATTEMPTING RECONNECT'}</span>
+                        <div className="w-1.5 h-1.5 bg-[#06D6A0] rounded-full animate-pulse" />
+                        <span className="text-[#06D6A0] font-mono text-sm">ACTIVE // 60Hz // CNN READY</span>
                     </div>
                 </div>
             </div>
